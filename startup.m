@@ -1,3 +1,3 @@
-addpath("2DModels\");
-addpath("sun3d");
-addpath("3D_Utilities\");
+addpath(fullfile(pwd, '2DModels'));
+addpath(fullfile(pwd, 'sun3d'));
+addpath(fullfile(pwd, '3D_Utilities'));
