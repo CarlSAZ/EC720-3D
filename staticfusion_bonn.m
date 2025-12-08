@@ -119,7 +119,8 @@ frameData = loadFrameDataBonn(data, frameRange, 1, depthFilterOpts, denoiseOpts,
 
 [~,poseIdx] = min(abs(data.rgblist.time_posix(frameRange(1)) - data.poseTruth.timestamp));
 
-firstPose = ensureHomogeneousTransform(bronnTransform(data.poseTruth(poseIdx,:)));
+% firstPose = ensureHomogeneousTransform(bronnTransform(data.poseTruth(poseIdx,:)));
+firstPose = [eye(4,3) zeros(4,1)];
 poses(:, :, 1) = firstPose;
 trajectory(:, 1) = firstPose(1:3, 4);
 
@@ -196,10 +197,10 @@ for idxFrame = 2:numFrames
         end
 
         % DEBUG
-        fprintf("CHEATING!!")
-        [~,dbposeIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
-
-        currentPose = bronnTransform(data.poseTruth(dbposeIdx,:));
+        % fprintf("CHEATING!!")
+        % [~,dbposeIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
+        % 
+        % currentPose = bronnTransform(data.poseTruth(dbposeIdx,:));
 
         fprintf('  Re-predicting static map...\n');
         prediction = predictStaticMap(staticMap, currentPose);
