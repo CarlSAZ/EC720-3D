@@ -1,10 +1,10 @@
 
 
-groundTruthFile = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_groundtruth_1mm_section.ply";
-dataset = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_crowd";
+% groundTruthFile = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_groundtruth_1mm_section.ply";
+% dataset = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_crowd";
 
-% groundTruthFile = "D:\Bronn\rgbd_bonn_groundtruth_1mm_section.ply";
-% dataset = "D:\Bronn\rgbd_bonn_crowd";
+groundTruthFile = "D:\Bronn\rgbd_bonn_groundtruth_1mm_section.ply";
+dataset = "D:\Bronn\rgbd_bonn_crowd";
 
 if exist("BronnTruth.mat",'file')
     load("BronnTruth.mat");
@@ -15,8 +15,8 @@ fclose(fid);
 
 truthTable = table([data{1},data{2},data{3}],[data{4},data{5},data{6}],data{7},...
     'VariableNames',{'xyz','rgb','scalar'});
-end
 TruthTree = KDTreeSearcher(truthTable.xyz);
+end
 %%
 
 fid = fopen(fullfile(dataset,'rgb.txt'));
@@ -35,7 +35,8 @@ fclose(fid);
 poseTruth = table(temp{1},[temp{2:4}],[temp{8},temp{5:7}],'VariableNames',{'timestamp','txyz','quat'});
 
 %%
-t1 = 1548339829.86292;
+t1 = 1548339828.42199;
+t1 = rgbFrameList.time_posix(178);
 [~,rgbIdx] = min(abs(t1 - rgbFrameList.time_posix));
 [~,depthIdx] = min(abs(t1 - depthFrameList.time_posix));
 %%
@@ -54,16 +55,29 @@ XYZcamera = depth2XYZcameraTUM(fx,fy,cx,cy, depth);
 
 [~,poseIdx] = min(abs(t1 - poseTruth.timestamp));
 
-[labels,dist] = findNonStaticTree(XYZcamera,poseTruth(poseIdx,:),TruthTree,[0.1 0.3]);
+% [labels,dist] = findNonStaticTree(XYZcamera,poseTruth(poseIdx,:),TruthTree,[0.1 0.3]);
 
 Tg = bronnTransform(poseTruth(poseIdx,:));
+newCamera = reshape(XYZcamera,[],4) * Tg';
+
 newTruth = truthTable;
 newTruth.xyz = [truthTable.xyz ones(height(truthTable),1)] * inv(Tg.');
+
 %%
+figure;
+scatter3(truthTable.xyz(1:10:end,3),truthTable.xyz(1:10:end,1),truthTable.xyz(1:10:end,2),[],double(truthTable.rgb(1:10:end,:))./255,'.')
+hold on;
+scatter3(reshape(newCamera(:,3),[],1), ...
+    reshape(newCamera(:,1),[],1),reshape(newCamera(:,2),[],1), ...
+    ...
+    [], ...
+    reshape(double(im)/255,[],3),'.');
+
 figure(1);clf;
-scatter3(reshape(XYZcamera(:,:,1),[],1), ...
-    reshape(XYZcamera(:,:,2),[],1),...
-    reshape(XYZcamera(:,:,3),[],1),[], ...
+scatter3(reshape(XYZcamera(:,:,3),[],1), ...
+    reshape(XYZcamera(:,:,1),[],1),-reshape(XYZcamera(:,:,2),[],1), ...
+    ...
+    [], ...
     reshape(double(im)/255,[],3),'.');
 hold on;
 scatter3(newTruth.xyz(1:10:end,1),newTruth.xyz(1:10:end,2),newTruth.xyz(1:10:end,3),[],double(newTruth.rgb(1:10:end,:))./255,'.')

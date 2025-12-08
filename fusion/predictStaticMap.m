@@ -15,7 +15,7 @@ addParameter(parser, 'ReturnWorld', true, @(x) islogical(x) && isscalar(x));
 parse(parser, varargin{:});
 opts = parser.Results;
 
-Rcw = Twc(1:3, 1:3)';
+Rcw = inv(Twc(1:3, 1:3));
 tcw = -Rcw * Twc(1:3, 4);
 
 prediction = struct();
