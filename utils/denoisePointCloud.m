@@ -1,13 +1,5 @@
 function [XYZclean, RGBclean, keepMask] = denoisePointCloud(XYZ, RGB, varargin)
-%DENOISEPOINTCLOUD Remove isolated points from a point cloud.
-%   [XYZclean, RGBclean, keepMask] = DENOISEPOINTCLOUD(XYZ, RGB, ...)
-%   keeps points that have at least minNeighbors within the specified
-%   radius using rangesearch. Inputs XYZ/RGB are 3xN arrays.
-%
-%   Name-value pairs:
-%       'radius'        - neighbourhood radius (metres, default 0.05)
-%       'minNeighbors'  - minimum number of neighbours (including itself)
-%                         required to keep a point (default 5)
+% Remove isolated points from point cloud using rangesearch
 
 narginchk(2, inf);
 validateattributes(XYZ, {'double'}, {'size',[3 NaN]}, mfilename, 'XYZ', 1);

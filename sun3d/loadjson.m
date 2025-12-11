@@ -1,43 +1,7 @@
-%% the rest of this file is all from JSON lab for reading a JSON file. 
-% http://www.mathworks.com/matlabcentral/fileexchange/33381
-% version: JSONLAB v1.0 alpha (Optimus) is updated on 08/23/2013. 
+% JSON lab for reading JSON files
+% Reference: http://www.mathworks.com/matlabcentral/fileexchange/33381
 
 function data = loadjson(fname,varargin)
-%
-% data=loadjson(fname,opt)
-%    or
-% data=loadjson(fname,'param1',value1,'param2',value2,...)
-%
-% parse a JSON (JavaScript Object Notation) file or string
-%
-% authors:Qianqian Fang (fangq<at> nmr.mgh.harvard.edu)
-%            date: 2011/09/09
-%         Nedialko Krouchev: http://www.mathworks.com/matlabcentral/fileexchange/25713
-%            date: 2009/11/02
-%         François Glineur: http://www.mathworks.com/matlabcentral/fileexchange/23393
-%            date: 2009/03/22
-%         Joel Feenstra:
-%         http://www.mathworks.com/matlabcentral/fileexchange/20565
-%            date: 2008/07/03
-%
-% $Id: loadjson.m 394 2012-12-18 17:58:11Z fangq $
-%
-% input:
-%      fname: input file name, if fname contains "{}" or "[]", fname
-%             will be interpreted as a JSON string
-%      opt: a struct to store parsing options, opt can be replaced by 
-%           a list of ('param',value) pairs. The param string is equivallent
-%           to a field in opt.
-%
-% output:
-%      dat: a cell array, where {...} blocks are converted into cell arrays,
-%           and [...] are converted to arrays
-%
-% license:
-%     BSD, see LICENSE_BSD.txt files for details 
-%
-% -- this function is part of jsonlab toolbox (http://iso2mesh.sf.net/cgi-bin/index.cgi?jsonlab)
-%
 
 global pos inStr len  esc index_esc len_esc isoct arraytoken
 
@@ -58,8 +22,7 @@ jstr=regexprep(inStr,'\\\\','  ');
 escquote=regexp(jstr,'\\"');
 arraytoken=sort([arraytoken escquote]);
 
-% String delimiters and escape chars identified to improve speed:
-esc = find(inStr=='"' | inStr=='\' ); % comparable to: regexp(inStr, '["\\]');
+esc = find(inStr=='"' | inStr=='\' );
 index_esc = 1; len_esc = length(esc);
 
 opt=varargin2struct(varargin{:});
@@ -87,10 +50,9 @@ if(~isempty(data))
       elseif(iscell(data))
           data=jcell2array(data);
       end
-end
+    end
 end
 
-%%
 function newdata=parse_collection(id,data,obj)
 
 if(jsoncount>0 && exist('data','var')) 
@@ -102,7 +64,6 @@ if(jsoncount>0 && exist('data','var'))
 end
 end
 
-%%
 function newdata=jcell2array(data)
 len=length(data);
 newdata=data;
@@ -112,9 +73,9 @@ for i=1:len
       elseif(iscell(data{i}))
           newdata{i}=jcell2array(data{i});
       end
+      end
 end
-end
-%%-------------------------------------------------------------------------
+
 function newdata=jstruct2array(data)
 fn=fieldnames(data);
 newdata=data;
@@ -174,9 +135,9 @@ if(~isempty(strmatch('x0x5F_ArrayType_',fn)) && ~isempty(strmatch('x0x5F_ArrayDa
   if(len==1)
       newdata=newdata{1};
   end
+    end
 end
-end
-%%-------------------------------------------------------------------------
+
 function object = parse_object(varargin)
     parse_char('{');
     object = [];
@@ -197,9 +158,8 @@ function object = parse_object(varargin)
     end
     parse_char('}');
 end
-%%-------------------------------------------------------------------------
 
-function object = parse_array(varargin) % JSON array is written in row-major order
+function object = parse_array(varargin)
 global pos inStr isoct
     parse_char('[');
     object = cell(0, 1);
@@ -211,18 +171,17 @@ global pos inStr isoct
         arraystr=regexprep(arraystr,'"([-+]*)_Inf_"','$1Inf');
         arraystr(find(arraystr==sprintf('\n')))=[];
         arraystr(find(arraystr==sprintf('\r')))=[];
-        %arraystr=regexprep(arraystr,'\s*,',','); % this is slow,sometimes needed
-        if(~isempty(e1l) && ~isempty(e1r)) % the array is in 2D or higher D
+        if(~isempty(e1l) && ~isempty(e1r))
             astr=inStr((e1l+1):(e1r-1));
             astr=regexprep(astr,'"_NaN_"','NaN');
             astr=regexprep(astr,'"([-+]*)_Inf_"','$1Inf');
             astr(find(astr==sprintf('\n')))=[];
             astr(find(astr==sprintf('\r')))=[];
             astr(find(astr==' '))='';
-            if(isempty(find(astr=='[', 1))) % array is 2D
+            if(isempty(find(astr=='[', 1)))
                 dim2=length(sscanf(astr,'%f,',[1 inf]));
             end
-        else % array is 1D
+        else
             astr=arraystr(2:end-1);
             astr(find(astr==' '))='';
             [obj count errmsg nextidx]=sscanf(astr,'%f,',[1,inf]);
@@ -278,7 +237,6 @@ global pos inStr isoct
     end
     parse_char(']');
 end
-%%-------------------------------------------------------------------------
 
 function parse_char(c)
     global pos inStr len
@@ -290,7 +248,6 @@ function parse_char(c)
         skip_whitespace;
     end
 end
-%%-------------------------------------------------------------------------
 
 function c = next_char
     global pos inStr len
@@ -301,7 +258,6 @@ function c = next_char
         c = inStr(pos);
     end
 end
-%%-------------------------------------------------------------------------
 
 function skip_whitespace
     global pos inStr len
@@ -309,10 +265,9 @@ function skip_whitespace
         pos = pos + 1;
     end
 end
-%%-------------------------------------------------------------------------
+
 function str = parseStr(varargin)
     global pos inStr len  esc index_esc len_esc
- % len, ns = length(inStr), keyboard
     if inStr(pos) ~= '"'
         error_pos('String starting with " expected at position %d');
     else
@@ -363,14 +318,13 @@ function str = parseStr(varargin)
                         str(nstr+(1:6)) = inStr(pos-1:pos+4);
                         pos = pos + 5;
                 end
-            otherwise % should never happen
-                str(nstr+1) = inStr(pos), keyboard
+            otherwise
+                str(nstr+1) = inStr(pos);
                 pos = pos + 1;
         end
     end
     error_pos('End of file while expecting end of inStr');
 end
-%%-------------------------------------------------------------------------
 
 function num = parse_number(varargin)
     global pos inStr len isoct
@@ -388,7 +342,6 @@ function num = parse_number(varargin)
     end
     pos = pos + delta-1;
 end
-%%-------------------------------------------------------------------------
 
 function val = parse_value(varargin)
     global pos inStr len
@@ -428,7 +381,6 @@ function val = parse_value(varargin)
     end
     error_pos('Value expected at position %d');
 end
-%%-------------------------------------------------------------------------
 
 function error_pos(msg)
     global pos inStr len
@@ -440,14 +392,9 @@ function error_pos(msg)
     inStr(poShow(1):poShow(2)) '<error>' inStr(poShow(3):poShow(4)) ];
     error( ['JSONparser:invalidFormat: ' msg] );
 end
-%%-------------------------------------------------------------------------
 
 function str = valid_field(str)
 global isoct
-% From MATLAB doc: field names must begin with a letter, which may be
-% followed by any combination of letters, digits, and underscores.
-% Invalid characters will be converted to underscores, and the prefix
-% "x0x[Hex code]_" will be added if the first character is not a letter.
     pos=regexp(str,'^[^A-Za-z]','once');
     if(~isempty(pos))
         if(~isoct)
@@ -472,9 +419,8 @@ global isoct
             str=[str str0(pos0(end-1)+1:pos0(end))];
         end
     end
-    %str(~isletter(str) & ~('0' <= str & str <= '9')) = '_';
 end
-%%-------------------------------------------------------------------------
+
 function endpos = matching_quote(str,pos)
 len=length(str);
 while(pos<len)
@@ -488,7 +434,7 @@ while(pos<len)
 end
 error('unmatched quotation mark');
 end
-%%-------------------------------------------------------------------------
+
 function [endpos e1l e1r maxlevel] = matching_bracket(str,pos)
 global arraytoken
 level=1;
@@ -527,28 +473,6 @@ end
 end
 
 function opt=varargin2struct(varargin)
-%
-% opt=varargin2struct('param1',value1,'param2',value2,...)
-%   or
-% opt=varargin2struct(...,optstruct,...)
-%
-% convert a series of input parameters into a structure
-%
-% authors:Qianqian Fang (fangq<at> nmr.mgh.harvard.edu)
-% date: 2012/12/22
-%
-% input:
-%      'param', value: the input parameters should be pairs of a string and a value
-%       optstruct: if a parameter is a struct, the fields will be merged to the output struct
-%
-% output:
-%      opt: a struct where opt.param1=value1, opt.param2=value2 ...
-%
-% license:
-%     BSD, see LICENSE_BSD.txt files for details 
-%
-% -- this function is part of jsonlab toolbox (http://iso2mesh.sf.net/cgi-bin/index.cgi?jsonlab)
-%
 
 len=length(varargin);
 opt=struct;
@@ -569,29 +493,6 @@ end
 end
 
 function val=jsonopt(key,default,varargin)
-%
-% val=jsonopt(key,default,optstruct)
-%
-% setting options based on a struct. The struct can be produced
-% by varargin2struct from a list of 'param','value' pairs
-%
-% authors:Qianqian Fang (fangq<at> nmr.mgh.harvard.edu)
-%
-% $Id: loadjson.m 371 2012-06-20 12:43:06Z fangq $
-%
-% input:
-%      key: a string with which one look up a value from a struct
-%      default: if the key does not exist, return default
-%      optstruct: a struct where each sub-field is a key 
-%
-% output:
-%      val: if key exists, val=optstruct.key; otherwise val=default
-%
-% license:
-%     BSD, see LICENSE_BSD.txt files for details
-%
-% -- this function is part of jsonlab toolbox (http://iso2mesh.sf.net/cgi-bin/index.cgi?jsonlab)
-% 
 
 val=default;
 if(nargin<=2) return; end

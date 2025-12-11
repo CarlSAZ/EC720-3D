@@ -1,30 +1,10 @@
+% Author: Anqi Wei
+% Adapted from StaticFusion
+% Reference: StaticFusion: Background Reconstruction for Dense RGB-D SLAM in Dynamic Environments
+%            GitHub: https://github.com/raluca-scona/staticfusion
+
 function result = trackAgainstStaticMap(map, initialTwc, pointsCam, mask, varargin)
-%TRACKAGAINSTSTATICMAP Align current frame to static surfel map.
-%   result = TRACKAGAINSTSTATICMAP(map, initialTwc, pointsCam, mask) refines
-%   the camera-to-world pose using point-to-plane ICP against the static map.
-%
-%   Inputs:
-%       map         - static map struct from INITIALIZESTATICMAP / UPDATESTATICMAP
-%       initialTwc  - 4x4 initial camera-to-world pose estimate
-%       pointsCam   - 3xN camera-frame points (metres)
-%       mask        - logical 1xN mask selecting static observations (optional)
-%
-%   Name-value pairs:
-%       'MaxIterations'        - maximum ICP iterations (default 10)
-%       'MaxCorrespondence'    - distance threshold in metres (default 0.07)
-%       'NormalSimilarity'     - minimum cosine similarity (default cos(45°))
-%       'Damping'              - Levenberg-Marquardt damping factor (1e-4)
-%       'MinInliers'           - minimum required correspondences (80)
-%       'Verbose'              - logical flag to print progress (false)
-%
-%   Output struct fields:
-%       Twc             - refined 4x4 pose
-%       success         - logical success flag
-%       iterations      - number of iterations performed
-%       rmse            - final root-mean-square point-to-plane residual
-%       inlierMask      - logical mask of inlier correspondences
-%       correspondences - indices into map surfels for inliers
-%       residuals       - point-to-plane residuals for inliers
+% Track camera pose using point-to-plane ICP against static map
 
 narginchk(3, inf);
 validateStaticMap(map);
@@ -53,7 +33,7 @@ rmse = NaN;
 inlierMask = false(1, sum(mask));
 correspondences = zeros(1, sum(mask));
 residuals = [];
-inliers = false(1, sum(mask));  % Initialize to avoid undefined variable
+inliers = false(1, sum(mask));
 
 obsPoints = pointsCam(:, mask);
 
@@ -63,7 +43,6 @@ if isempty(obsPoints)
     return;
 end
 
-% Precompute kd-tree data for map positions.
 mapPositions = map.positions;
 mapNormals = map.normals;
 
@@ -74,20 +53,16 @@ if isempty(mapPositions)
 end
 
 iteration = 0;
-idx = zeros(1, size(obsPoints, 2));  % Initialize with correct size
-numObsBase = size(obsPoints, 2);  % Base number of observations
+idx = zeros(1, size(obsPoints, 2));
+numObsBase = size(obsPoints, 2);
 for iter = 1:opts.MaxIterations
     iteration = iter;
-    % Reset inliers at the start of each iteration to ensure correct size
     inliers = false(1, numObsBase);
     
-    % Transform observations to world frame using current pose.
     R = Twc(1:3, 1:3);
     t = Twc(1:3, 4);
     obsWorld = R * obsPoints + t;
 
-    % Find nearest surfels in the map.
-    % Validate inputs
     if any(isnan(mapPositions(:))) || any(isinf(mapPositions(:)))
         warning('trackAgainstStaticMap:InvalidMap', 'Map contains NaN or Inf values.');
         break;
@@ -107,26 +82,21 @@ for iter = 1:opts.MaxIterations
         break;
     end
     
-    % Validate knnsearch output dimensions
     numObsCheck = size(obsWorld, 2);
     if numel(idx) ~= numObsCheck || numel(dists) ~= numObsCheck
         warning('trackAgainstStaticMap:KnnSearchDimensionMismatch', ...
             'knnsearch output size mismatch: idx=%d, dists=%d, expected=%d', ...
             numel(idx), numel(dists), numObsCheck);
-        % Truncate or pad to match
         if numel(idx) > numObsCheck
             idx = idx(1:numObsCheck);
             dists = dists(1:numObsCheck);
         elseif numel(idx) < numObsCheck
-            % This shouldn't happen, but handle it
             warning('trackAgainstStaticMap:UnexpectedShortOutput', ...
                 'knnsearch returned fewer results than expected');
             break;
         end
     end
     
-    % Ensure idx and dists are row vectors to match inliers
-    % CRITICAL: inliers is a row vector, so idx and dists must be row vectors too
     if size(idx, 1) > size(idx, 2)
         idx = idx';
     end
@@ -134,22 +104,18 @@ for iter = 1:opts.MaxIterations
         dists = dists';
     end
     
-    % Validate indices
     if any(idx < 1) || any(idx > size(mapPositions, 2))
         warning('trackAgainstStaticMap:InvalidIndices', ...
             'knnsearch returned invalid indices. Range: [%d, %d], Map size: %d', ...
             min(idx), max(idx), size(mapPositions, 2));
-        % Fix invalid indices instead of breaking
         idx(idx < 1) = 1;
         idx(idx > size(mapPositions, 2)) = size(mapPositions, 2);
     end
     
     corresNormals = mapNormals(:, idx);
 
-    % Inlier selection based on distance and normal similarity.
     numObs = size(obsWorld, 2);
     
-    % Ensure dists is a row vector to match inliers
     if size(dists, 1) > size(dists, 2)
         dists = dists';
     end
@@ -162,7 +128,6 @@ for iter = 1:opts.MaxIterations
     
     obsNormalsApprox = normalizeColumns(R * obsPoints);
     normalSimilarity = sum(corresNormals .* obsNormalsApprox, 1);
-    % Ensure normalSimilarity is a row vector
     if size(normalSimilarity, 1) > 1 && size(normalSimilarity, 2) == 1
         normalSimilarity = normalSimilarity';
     end
@@ -173,7 +138,6 @@ for iter = 1:opts.MaxIterations
         break;
     end
     
-    % Ensure both are row vectors for element-wise AND
     if size(validDistance, 1) > 1
         validDistance = validDistance';
     end
@@ -181,7 +145,6 @@ for iter = 1:opts.MaxIterations
         validNormals = validNormals';
     end
     
-    % Final dimension check before combining
     if numel(validDistance) ~= numObs || numel(validNormals) ~= numObs
         warning('trackAgainstStaticMap:DimensionMismatchBeforeAnd', ...
             'Dimension mismatch: validDistance=%d, validNormals=%d, numObs=%d', ...
@@ -189,15 +152,13 @@ for iter = 1:opts.MaxIterations
         break;
     end
     
-    % Ensure both are exactly the same size
     if numel(validDistance) ~= numel(validNormals)
         minLen = min(numel(validDistance), numel(validNormals));
         validDistance = validDistance(1:minLen);
         validNormals = validNormals(1:minLen);
-        numObs = minLen;  % Update numObs to match
+        numObs = minLen;
     end
     
-    % Ensure both are logical before AND operation
     if ~islogical(validDistance)
         validDistance = logical(validDistance);
     end
@@ -207,7 +168,6 @@ for iter = 1:opts.MaxIterations
     
     inliers = validDistance & validNormals;
     
-    % Ensure inliers has correct size and is logical
     if ~islogical(inliers)
         warning('trackAgainstStaticMap:InliersNotLogicalAfterAnd', ...
             'inliers is not logical after AND, resetting. Type: %s', class(inliers));
@@ -217,7 +177,6 @@ for iter = 1:opts.MaxIterations
     if numel(inliers) ~= numObs
         warning('trackAgainstStaticMap:InlierSizeAfterAnd', ...
             'inliers size (%d) != numObs (%d) after AND operation, resetting', numel(inliers), numObs);
-        % Reset to correct size instead of truncating/padding
         inliers = false(1, numObs);
     end
 
@@ -229,28 +188,22 @@ for iter = 1:opts.MaxIterations
         break;
     end
 
-    % Validate indices before using them
-    % Ensure inliers is a logical vector matching obsWorld columns
     if numel(inliers) ~= numObs
         warning('trackAgainstStaticMap:InlierSizeMismatch', ...
             'Inliers size (%d) does not match observations (%d)', numel(inliers), numObs);
         break;
     end
     
-    % Ensure idx is a row vector to match inliers
     if size(idx, 1) > size(idx, 2)
         idx = idx';
     end
     
-    % Build valid index mask - ensure it's a row vector
     validIdxMask = (idx >= 1) & (idx <= size(mapPositions, 2));
     
-    % Ensure validIdxMask is logical and has correct size and orientation
     if ~islogical(validIdxMask)
         validIdxMask = logical(validIdxMask);
     end
     
-    % Ensure validIdxMask is a row vector
     if size(validIdxMask, 1) > size(validIdxMask, 2)
         validIdxMask = validIdxMask';
     end
@@ -262,19 +215,16 @@ for iter = 1:opts.MaxIterations
         break;
     end
     
-    % Ensure inliers is logical and row vector before AND operation
     if ~islogical(inliers)
         warning('trackAgainstStaticMap:InliersNotLogicalBeforeIdxMask', ...
             'inliers is not logical before idx mask, resetting. Type: %s, size: %d', class(inliers), numel(inliers));
         inliers = false(1, numObs);
     end
     
-    % Ensure inliers is a row vector
     if size(inliers, 1) > size(inliers, 2)
         inliers = inliers';
     end
     
-    % Final dimension check before AND
     if numel(inliers) ~= numel(validIdxMask)
         warning('trackAgainstStaticMap:DimensionMismatchBeforeAnd', ...
             'Dimension mismatch before AND: inliers=%d, validIdxMask=%d', numel(inliers), numel(validIdxMask));
@@ -292,9 +242,6 @@ for iter = 1:opts.MaxIterations
         break;
     end
 
-    % Ensure inliers indices are valid
-    % Final safety check: ensure inliers length matches obsWorld columns
-    % CRITICAL: Ensure inliers is a logical array, not numeric indices
     if ~islogical(inliers)
         warning('trackAgainstStaticMap:InliersNotLogical', ...
             'inliers is not logical, resetting. Type: %s, size: %d', class(inliers), numel(inliers));
@@ -304,17 +251,14 @@ for iter = 1:opts.MaxIterations
     if numel(inliers) ~= numObs
         warning('trackAgainstStaticMap:FinalInlierSizeMismatch', ...
             'Final inliers size (%d) does not match observations (%d), resetting.', numel(inliers), numObs);
-        % Reset to correct size instead of truncating/padding
         inliers = false(1, numObs);
     end
     
     inlierIndices = find(inliers);
     if isempty(inlierIndices)
-        break;  % No inliers found
+        break;
     end
-    % Ensure all indices are within valid range
     if any(inlierIndices > numObs) || any(inlierIndices < 1)
-        % Truncate to valid range
         validMask = inlierIndices >= 1 & inlierIndices <= numObs;
         inliers = false(1, numObs);
         inliers(inlierIndices(validMask)) = true;
@@ -324,15 +268,12 @@ for iter = 1:opts.MaxIterations
         end
     end
     
-    % Final check before using inliers
     if numel(inliers) ~= size(obsWorld, 2)
         warning('trackAgainstStaticMap:DimensionMismatch', ...
             'Cannot proceed: inliers size (%d) != obsWorld columns (%d)', numel(inliers), size(obsWorld, 2));
         break;
     end
 
-    % Use logical indexing with inliers
-    % Ensure inliers is logical and has correct size
     if ~islogical(inliers) || numel(inliers) ~= size(obsWorld, 2)
         warning('trackAgainstStaticMap:InvalidInliersBeforeUse', ...
             'inliers invalid before use: logical=%d, size=%d, expected=%d', ...
@@ -340,13 +281,11 @@ for iter = 1:opts.MaxIterations
         break;
     end
     
-    % Get inlier indices for idx array
     inlierIdx = find(inliers);
     if isempty(inlierIdx) || numel(inlierIdx) == 0
         break;
     end
     
-    % Ensure inlierIdx values are valid for idx array
     if any(inlierIdx < 1) || any(inlierIdx > numel(idx))
         warning('trackAgainstStaticMap:InvalidInlierIdx', ...
             'inlierIdx out of range: [%d, %d], idx size: %d', ...
@@ -358,20 +297,17 @@ for iter = 1:opts.MaxIterations
     corresNormalsInliers = corresNormals(:, inliers);
     mapPointsInliers = mapPositions(:, idx(inlierIdx));
 
-    % Compute point-to-plane residuals
     residuals = sum(corresNormalsInliers .* (obsWorldInliers - mapPointsInliers), 1);
     
-    % Store residuals for final RMSE calculation
     if ~exist('finalResiduals', 'var') || isempty(finalResiduals)
         finalResiduals = residuals;
     else
-        finalResiduals = residuals;  % Update with latest residuals
+        finalResiduals = residuals;
     end
 
-    % Assemble linear system for point-to-plane ICP.
     numInliers = numel(residuals);
     if numInliers < 6
-        break;  % Need at least 6 points for 6 DOF
+        break;
     end
     A = zeros(numInliers, 6);
     b = -residuals';
@@ -386,7 +322,6 @@ for iter = 1:opts.MaxIterations
         A(k, 4:6) = n';
     end
 
-    % Remove rows with NaN/Inf
     validRows = ~any(isnan(A), 2) & ~any(isinf(A), 2) & ~isnan(b) & ~isinf(b);
     if nnz(validRows) < 6
         break;
@@ -407,7 +342,7 @@ for iter = 1:opts.MaxIterations
             break;
         end
     catch
-        break;  % Matrix solve failed
+        break;
     end
 
     if norm(xi) < 1e-6
@@ -429,18 +364,16 @@ for iter = 1:opts.MaxIterations
     end
 end
 
-% Final RMSE calculation if not set during loop
 if isnan(rmse)
     if exist('finalResiduals', 'var') && ~isempty(finalResiduals) && numel(finalResiduals) > 0
         rmse = sqrt(mean(finalResiduals.^2));
     elseif exist('residuals', 'var') && ~isempty(residuals) && numel(residuals) > 0
         rmse = sqrt(mean(residuals.^2));
     else
-        rmse = NaN;  % No valid residuals computed
+        rmse = NaN;
     end
 end
 
-% Ensure residuals variable exists for output
 if ~exist('residuals', 'var') || isempty(residuals)
     if exist('finalResiduals', 'var') && ~isempty(finalResiduals)
         residuals = finalResiduals;
@@ -453,7 +386,6 @@ if nnz(inliers) >= opts.MinInliers
     success = true;
 end
 
-% Construct inlier mask relative to full input mask.
 fullInlierMask = false(1, size(pointsCam, 2));
 fullIdx = find(mask);
 if ~isempty(fullIdx) && ~isempty(inliers) && numel(inliers) == numel(fullIdx)

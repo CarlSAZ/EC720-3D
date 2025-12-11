@@ -1,17 +1,5 @@
 %% CHANGE_DETECTION_DEMO
-%  Demonstrates a simple 3D change-detection pipeline using SUN3D frames.
-%  The script loads two RGB-D frames, converts them to world-coordinate
-%  point clouds, performs a nearest-neighbour distance comparison, and
-%  visualises the detected additions and removals.
-%
-%  Requirements:
-%    - Internet access (unless the SUN3D frames are cached locally)
-%    - Statistics and Machine Learning Toolbox for knnsearch (or adapt the
-%      nearest-neighbour step if unavailable)
-%
-%  Usage:
-%    Run the script from the project root. Adjust the parameters in the
-%    "User configuration" section as needed.
+% Simple 3D change-detection pipeline using SUN3D frames
 
 clear; close all; clc;
 
@@ -22,9 +10,9 @@ if exist(utilsDir, 'dir')
 end
 
 %% User configuration
-sequenceName = 'hotel_umd/maryland_hotel3';  % SUN3D sequence
-frameIDs = [1, 10];                          % Frames to compare (indices in the original sequence)
-skipColorDownsample = 5;                     % Plot every Nth point for dense clouds (for speed/clarity)
+sequenceName = 'hotel_umd/maryland_hotel3';
+frameIDs = [1, 10];
+skipColorDownsample = 5;
 
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 8);
@@ -38,7 +26,7 @@ visualViews = {[135, 30], [0, 90]};
 
 assert(numel(frameIDs) == 2, 'Provide exactly two frame indices to compare.');
 
-%% Load data for the requested frames
+%% Load data
 fprintf('Loading SUN3D data (%s) for frames %d and %d...\n', ...
     sequenceName, frameIDs(1), frameIDs(2));
 data = loadSUN3D(sequenceName, frameIDs);
@@ -51,9 +39,9 @@ pcA = buildWorldPointCloud(data, frameIDs, 1, depthFilterOpts, denoiseOpts);
 pcB = buildWorldPointCloud(data, frameIDs, 2, depthFilterOpts, denoiseOpts);
 
 fprintf('Frame %d produced %d valid points; frame %d produced %d valid points.\n', ...
-    pcA.frameID, size(pcA.XYZ, 2), pcB.frameID, size(pcB.XYZ, 2));
+    pcA.frameID,     size(pcA.XYZ, 2), pcB.frameID, size(pcB.XYZ, 2));
 
-%% Change detection via nearest-neighbour distance thresholding
+%% Change detection
 fprintf('Running nearest-neighbour differencing with threshold = %.2f m...\n', diffParams.threshold);
 
 diffArgs = structToNameValue(diffParams);
@@ -78,7 +66,7 @@ fprintf('Raw detections: %d added, %d removed.\n', ...
 fprintf('After cluster filtering: %d added, %d removed.\n', ...
     size(addedXYZ, 2), size(removedXYZ, 2));
 
-%% Visualisation
+%% Visualization
 figure('Name', 'SUN3D Change Detection Demo');
 
 subplot(1, 2, 1);
@@ -112,9 +100,7 @@ xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
 visualArgs = structToNameValue(visualOpts);
 visualizeChanges(pcA, pcB, addedXYZ, removedXYZ, visualArgs{:}, 'views', visualViews);
 
-%% Helper functions
 function pc = buildWorldPointCloud(data, frameIDsFull, localIdx, depthOpts, denoiseOpts)
-% buildWorldPointCloud Convert a SUN3D frame into a filtered world point cloud.
 image = imread(data.image{localIdx});
 depth = double(depthRead(data.depth{localIdx}));
 
@@ -134,7 +120,6 @@ pc = struct('XYZ', XYZworld, 'RGB', RGB, 'frameID', frameIDFull);
 end
 
 function scatterPointCloud(points, colours, downsample)
-% scatterPointCloud  Convenience wrapper around scatter3 for dense clouds.
 if nargin < 3 || downsample <= 1
     sampleIdx = 1:size(points, 2);
 else
@@ -145,7 +130,6 @@ scatter3(points(1, sampleIdx), points(2, sampleIdx), points(3, sampleIdx), ...
 end
 
 function args = structToNameValue(s)
-% structToNameValue Convert a scalar struct into name/value pairs for varargin.
 if isempty(s)
     args = {};
     return;
@@ -160,5 +144,4 @@ for idx = 1:numel(fields)
     args{2*idx} = s.(fields{idx});
 end
 end
-
 

@@ -1,8 +1,10 @@
-%% STATICFUSION - Bonn
-% Demonstrates an incremental static-fusion pipeline inspired by StaticFusion.
-% The script loads a Bonn sequence, builds a surfel-based static background
-% map, segments static/dynamic observations each frame, tracks the camera pose
-% against the map, and visualises the reconstruction progress.
+% Author: Anqi Wei
+% Adapted from StaticFusion
+% Reference: StaticFusion: Background Reconstruction for Dense RGB-D SLAM in Dynamic Environments
+%            GitHub: https://github.com/raluca-scona/staticfusion
+
+%% STATICFUSION - Bonn Dataset
+% Incremental static-fusion pipeline inspired by StaticFusion
 
 clear; close all; clc;
 
@@ -14,7 +16,6 @@ else
     error('startup.m is missing.');
 end
 
-% Verify visualization functions are available
 if exist('visualizeProgress', 'file') ~= 2
     error('visualizeProgress function not found. Please check startup.m includes visualization path.');
 end
@@ -22,7 +23,6 @@ if exist('visualizeStaticFusionResults', 'file') ~= 2
     error('visualizeStaticFusionResults function not found. Please check startup.m includes visualization path.');
 end
 
-% Check for required functions
 if ~exist('knnsearch', 'builtin') && ~exist('knnsearch', 'file')
     error('knnsearch function not found. Please ensure Statistics and Machine Learning Toolbox is installed.');
 end
@@ -36,68 +36,56 @@ fprintf('  trackAgainstStaticMap: %s\n', func2str(@trackAgainstStaticMap));
 fprintf('Dependencies OK.\n\n');
 
 %% User configuration
-bonn_datadir = "D:\Bronn";
 sequenceName = "rgbd_bonn_crowd";
-base_sequence_dir = fullfile(bonn_datadir,sequenceName);
+base_sequence_dir = fullfile(scriptDir, sequenceName);
 
-frameRange = 189:286;%177+ (1:11);  % frames to process incrementally (reduced for debugging)
+fprintf('[StaticFusion] Dataset path: %s\n', base_sequence_dir);
 
-depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
-denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
-normalOpts = struct('K', 25);
+frameRange = 189:286;
 
-processing.downsample = 5;      % only keep every Nth point for processing (increased for stability)
-processing.visualiseEvery = 1;  % update visualisation every N frames
-processing.enableVisualisation = true;  % set to true to show figures
+depthFilterOpts = struct('minDepth', 0.3, 'maxDepth', 5.0, 'medianKernel', 5);
+denoiseOpts = struct('radius', 0.05, 'minNeighbors', 8);
+normalOpts = struct('K', 30);
+
+processing.downsample = 3;
+processing.visualiseEvery = 1;
+processing.enableVisualisation = true;
 
 mapInitOpts = struct( ...
-    'DefaultConfidence', 3.0, ...
-    'DefaultRadius', 0.04, ...
-    'MergeRadius', 0.07, ...
-    'ObservationWeight', 1.5, ...
-    'MaxConfidence', 12.0, ...
-    'ConfidenceDecay', 0.02);
+    'DefaultConfidence', 2.0, ...
+    'DefaultRadius', 0.03, ...
+    'MergeRadius', 0.04, ...
+    'ObservationWeight', 1.0, ...
+    'MaxConfidence', 8.0, ...
+    'ConfidenceDecay', 0.04);
 
 segmentationOpts = struct( ...
-    'GeometryThreshold', 0.05, ...
-    'ColorThreshold', 0.18, ...
-    'NormalThreshold', pi/5, ...
+    'GeometryThreshold', 0.06, ...
+    'ColorThreshold', 0.20, ...
+    'NormalThreshold', pi/4, ...
     'EnergyThreshold', 2.5, ...
     'EnergyWeights', struct('geometry', 1.2, 'colour', 1.0, 'normal', 0.7, 'prior', 1.0), ...
     'MinConfidence', 0.2);
 
 trackingOpts = struct( ...
-    'MaxIterations', 12, ...
-    'MaxCorrespondence', 0.08, ...
-    'NormalSimilarity', cosd(50), ...
+    'MaxIterations', 20, ...
+    'MaxCorrespondence', 0.12, ...
+    'NormalSimilarity', cosd(60), ...
     'Damping', 1e-3, ...
-    'MinInliers', 120, ...
+    'MinInliers', 40, ...
     'Verbose', false);
 
-
-
+USE_GT_INIT = false;
+USE_GT_FALLBACK = false;
+USE_GT_ONLY = false;
+USE_FRAME_TO_FRAME = true;
+ENABLE_EVALUATION = true;
+ENABLE_POSE_DIAGNOSTICS = true;
 
 %% Load data
-fprintf('[StaticFusion] Loading Bonn sequence list "%s"...\n', sequenceName);
+fprintf('[StaticFusion] Loading Bonn sequence "%s"...\n', sequenceName);
 
-data.basedir = base_sequence_dir;
-fid = fopen(fullfile(base_sequence_dir,'rgb.txt'));
-temp = textscan(fid,'%f %s','HeaderLines',2);
-fclose(fid);
-data.rgblist = table(temp{1},string(temp{2}),'VariableNames',{'time_posix','filename'});
-
-fid = fopen(fullfile(base_sequence_dir,'depth.txt'));
-temp = textscan(fid,'%f %s','HeaderLines',2);
-fclose(fid);
-data.depthlist = table(temp{1},string(temp{2}),'VariableNames',{'time_posix','filename'});
-
-fid = fopen(fullfile(base_sequence_dir,"groundtruth.txt"));
-% timestamp tx ty tz qx qy qz qw
-temp = textscan(fid,"%f %f %f %f %f %f %f %f",'HeaderLines',2);
-fclose(fid);
-data.poseTruth = table(temp{1},[temp{2:4}],[temp{8},temp{5:7}],'VariableNames',{'timestamp','txyz','quat'});
-clear temp;
-
+data = loadBonn(base_sequence_dir, frameRange);
 numFrames = numel(frameRange);
 
 if isempty(data.poseTruth)
@@ -114,6 +102,11 @@ lastStaticWorld = zeros(3, 0);
 lastDynamicWorld = zeros(3, 0);
 lastFrameID = frameRange(1);
 
+if ENABLE_EVALUATION
+    gtPoses = zeros(4, 4, numFrames);
+    gtTrajectory = zeros(3, numFrames);
+end
+
 %% Initialise with first frame
 fprintf('[StaticFusion] Initialising map with frame %d...\n', frameRange(1));
 frameData = loadFrameDataBonn(data, frameRange, 1, depthFilterOpts, denoiseOpts, normalOpts);
@@ -125,6 +118,15 @@ firstPose = ensureHomogeneousTransform(bronnTransform(data.poseTruth(poseIdx,:))
 poses(:, :, 1) = firstPose;
 trajectory(:, 1) = firstPose(1:3, 4);
 
+if ENABLE_EVALUATION
+    poseRow_gt = data.poseTruth(poseIdx, :);
+    txyz_gt = poseRow_gt.txyz;
+    quat_gt = poseRow_gt.quat;
+    quat_tum_gt = [quat_gt(2), quat_gt(3), quat_gt(4), quat_gt(1)];  % [qx, qy, qz, qw]
+    gtPoses(:, :, 1) = tumPoseToTransform(txyz_gt, quat_tum_gt);
+    gtTrajectory(:, 1) = gtPoses(1:3, 4, 1);
+end
+
 sampleIdx = selectSampleIndices(size(frameData.XYZcam, 2), processing.downsample);
 
 XYZcamSample = frameData.XYZcam(:, sampleIdx);
@@ -132,8 +134,24 @@ RGBsample = frameData.RGB(:, sampleIdx);
 normalsCamSample = frameData.normalsCam(:, sampleIdx);
 
 Rw = firstPose(1:3, 1:3);
+tw = firstPose(1:3, 4);
 normalsWorld = normalizeColumns(Rw * normalsCamSample);
-XYZworld = Rw * XYZcamSample + firstPose(1:3, 4);
+XYZworld = Rw * XYZcamSample + tw;
+
+if ENABLE_POSE_DIAGNOSTICS
+    rotDet = det(Rw);
+    if abs(rotDet - 1.0) > 0.01
+        warning('Initial pose rotation matrix determinant is %.6f', rotDet);
+    end
+    shouldBeIdentity = Rw * Rw' - eye(3);
+    if any(abs(shouldBeIdentity(:)) > 0.01)
+        warning('Initial pose rotation matrix is not orthogonal (max error: %.6f)', max(abs(shouldBeIdentity(:))));
+    end
+    fprintf('  Initial pose validation:\n');
+    fprintf('    Translation: [%.4f, %.4f, %.4f]\n', tw(1), tw(2), tw(3));
+    fprintf('    Rotation det: %.6f\n', rotDet);
+    fprintf('    Points transformed: %d\n', size(XYZworld, 2));
+end
 
 pcInit = struct('XYZ', XYZworld, 'RGB', RGBsample);
 mapInitArgs = structToNameValue(mapInitOpts);
@@ -144,6 +162,10 @@ lastFrameID = frameRange(1);
 
 staticCounts(1) = size(XYZcamSample, 2);
 dynamicCounts(1) = 0;
+
+prevPointsWorld = [];
+prevNormalsWorld = [];
+
 %% Main processing loop
 currentPose = firstPose;
 for idxFrame = 2:numFrames
@@ -170,7 +192,6 @@ for idxFrame = 2:numFrames
         colours = frameData.RGB(:, sampleIdx);
         normalsCam = frameData.normalsCam(:, sampleIdx);
         
-        % Validate sizes
         if size(pointsCam, 2) ~= size(colours, 2) || size(pointsCam, 2) ~= size(normalsCam, 2)
             error('Size mismatch: points=%d, colours=%d, normals=%d', ...
                 size(pointsCam, 2), size(colours, 2), size(normalsCam, 2));
@@ -186,16 +207,112 @@ for idxFrame = 2:numFrames
         segArgs = [structToNameValue(segmentationOpts), {'NormalsCam', normalsCam}];
         segRes = estimateStaticMask(pointsCam, colours, prediction, segArgs{:});
 
-        fprintf('  Tracking pose...\n');
-        trackArgs = structToNameValue(trackingOpts);
-        trackRes = trackAgainstStaticMap(staticMap, currentPose, pointsCam, segRes.staticMask, trackArgs{:});
-
-        if trackRes.success
-            currentPose = trackRes.Twc;
-            fprintf('  Pose tracking succeeded (RMSE: %.4f)\n', trackRes.rmse);
+        if USE_GT_ONLY
+            [~,gtPoseIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
+            poseRow_gt = data.poseTruth(gtPoseIdx, :);
+            txyz_gt = poseRow_gt.txyz;
+            quat_gt = poseRow_gt.quat;
+            quat_tum_gt = [quat_gt(2), quat_gt(3), quat_gt(4), quat_gt(1)];
+            currentPose = tumPoseToTransform(txyz_gt, quat_tum_gt);
+            
+            rotDet = det(currentPose(1:3, 1:3));
+            if abs(rotDet - 1.0) > 0.01
+                error('GT pose rotation matrix invalid: det=%.6f', rotDet);
+            end
+            
+            fprintf('  [TEST MODE] Using ground truth pose.\n');
+            fprintf('  GT pose translation: [%.4f, %.4f, %.4f]\n', txyz_gt(1), txyz_gt(2), txyz_gt(3));
+            trackRes.success = true;
+            trackRes.rmse = 0;
         else
-            warning('Pose tracking failed for frame %d; keeping previous pose.', frameID);
-        end
+            fprintf('  Tracking pose...\n');
+            
+            trackRes = struct();
+            trackRes.success = false;
+            
+            if USE_FRAME_TO_FRAME && ~isempty(prevPointsWorld) && size(prevPointsWorld, 2) > 100
+                fprintf('  Trying frame-to-frame tracking...\n');
+                
+                staticPointsCam = pointsCam(:, segRes.staticMask);
+                staticNormalsCam = normalsCam(:, segRes.staticMask);
+                
+                if size(staticPointsCam, 2) > 50
+                    initialPoseForTracking = currentPose;
+                    if idxFrame > 2
+                        prevPose = poses(:, :, idxFrame - 1);
+                        prevPrevPose = poses(:, :, idxFrame - 2);
+                        relMotion = inv(prevPrevPose) * prevPose;
+                        relTransNorm = norm(relMotion(1:3, 4));
+                        if relTransNorm > 0.01 && relTransNorm < 0.3
+                            predictedPose = prevPose * relMotion;
+                            rotDet = det(predictedPose(1:3, 1:3));
+                            if abs(rotDet - 1.0) < 0.01
+                                initialPoseForTracking = predictedPose;
+                            end
+                        end
+                    end
+                    
+                    frameTrackOpts = trackingOpts;
+                    if isfield(frameTrackOpts, 'Verbose')
+                        frameTrackOpts = rmfield(frameTrackOpts, 'Verbose');
+                    end
+                    frameTrackArgs = structToNameValue(frameTrackOpts);
+                    trackRes = trackFrameToFrame(prevPointsWorld, prevNormalsWorld, ...
+                        staticPointsCam, staticNormalsCam, initialPoseForTracking, frameTrackArgs{:});
+                    
+                    if trackRes.success
+                        fprintf('  Frame-to-frame tracking succeeded (RMSE: %.4f, inliers: %d)\n', ...
+                            trackRes.rmse, trackRes.numInliers);
+                        currentPose = trackRes.Twc;
+                    else
+                        fprintf('  Frame-to-frame tracking failed, trying static map tracking...\n');
+                    end
+                end
+            end
+            
+            if ~trackRes.success
+                if isempty(staticMap.positions) || size(staticMap.positions, 2) < 100
+                    warning('Static map is too small (%d points)', size(staticMap.positions, 2));
+                end
+                
+                numStaticPoints = nnz(segRes.staticMask);
+                fprintf('  Static points for tracking: %d / %d (%.1f%%)\n', ...
+                    numStaticPoints, size(pointsCam, 2), 100 * numStaticPoints / size(pointsCam, 2));
+                
+                initialPoseForTracking = currentPose;
+                if trackRes.success
+                    initialPoseForTracking = trackRes.Twc;
+                    fprintf('  Using frame-to-frame result as initial estimate for static map tracking.\n');
+                elseif idxFrame > 2
+                    prevPose = poses(:, :, idxFrame - 1);
+                    prevPrevPose = poses(:, :, idxFrame - 2);
+                    relMotion = inv(prevPrevPose) * prevPose;
+                    relTransNorm = norm(relMotion(1:3, 4));
+                    if relTransNorm > 0.01 && relTransNorm < 0.3
+                        predictedPose = prevPose * relMotion;
+                        rotDet = det(predictedPose(1:3, 1:3));
+                        if abs(rotDet - 1.0) < 0.01
+                            initialPoseForTracking = predictedPose;
+                        end
+                    end
+                end
+                
+                warnState = warning('query', 'all');
+                warning('off', 'all');
+                trackArgs = structToNameValue(trackingOpts);
+                trackRes = trackAgainstStaticMap(staticMap, initialPoseForTracking, pointsCam, segRes.staticMask, trackArgs{:});
+                warning(warnState);
+            end
+            
+            if ~trackRes.success
+                fprintf('  Tracking failed. Static map size: %d points\n', size(staticMap.positions, 2));
+                if isfield(trackRes, 'inlierMask')
+                    fprintf('  Inliers: %d (required: %d)\n', nnz(trackRes.inlierMask), trackingOpts.MinInliers);
+                end
+                if isfield(trackRes, 'rmse')
+                    fprintf('  RMSE: %.4f\n', trackRes.rmse);
+                end
+            end
 
         [~,dbposeIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
         truePoses(:,:,idxFrame) = bronnTransform(data.poseTruth(dbposeIdx,:));
@@ -219,21 +336,102 @@ for idxFrame = 2:numFrames
         
         Rw = currentPose(1:3, 1:3);
         tw = currentPose(1:3, 4);
+        
+        if ENABLE_POSE_DIAGNOSTICS && idxFrame > 2
+            prevPose = poses(:, :, idxFrame - 1);
+            relMotion = inv(prevPose) * currentPose;
+            relTrans = relMotion(1:3, 4);
+            relTransNorm = norm(relTrans);
+            
+            if relTransNorm > 0.5
+                warning('Frame %d: Large relative translation (%.4f m)', frameID, relTransNorm);
+            end
+            
+            rotDet = det(Rw);
+            if abs(rotDet - 1.0) > 0.01
+                warning('Frame %d: Rotation matrix determinant is %.6f', frameID, rotDet);
+            end
+        end
+        
         lastStaticWorld = Rw * staticPoints + tw;
         lastDynamicWorld = Rw * dynamicPoints + tw;
         lastFrameID = frameID;
 
-        fprintf('  Updating static map (%d static points)...\n', size(staticPoints, 2));
+        fprintf('  Updating static map (%d static points, %d dynamic points)...\n', ...
+            size(staticPoints, 2), size(dynamicPoints, 2));
+        
+        if ENABLE_POSE_DIAGNOSTICS && ~isempty(staticPoints)
+            if any(isnan(lastStaticWorld(:))) || any(isinf(lastStaticWorld(:)))
+                error('Frame %d: NaN or Inf in transformed static points!', frameID);
+            end
+        end
+        
+        totalPoints = size(staticPoints, 2) + size(dynamicPoints, 2);
+        staticRatio = size(staticPoints, 2) / max(totalPoints, 1);
+        
+        if staticRatio > 0.85 && totalPoints > 1000
+            warning('Frame %d: Suspiciously high static ratio (%.2f%%)', frameID, staticRatio * 100);
+        end
+        
         if ~isempty(staticPoints)
             staticMap = updateStaticMap(staticMap, currentPose, staticPoints, staticNormalsCam, staticColours);
+            
+            if ENABLE_POSE_DIAGNOSTICS
+                if any(isnan(staticMap.positions(:))) || any(isinf(staticMap.positions(:)))
+                    error('Frame %d: Static map contains NaN or Inf after update!', frameID);
+                end
+                fprintf('  Map size after update: %d surfels\n', size(staticMap.positions, 2));
+            end
+            
+            if mod(idxFrame, 10) == 0 && ~isempty(staticMap.confidence)
+                minConfidence = 0.5;
+                keepMask = staticMap.confidence >= minConfidence;
+                if nnz(~keepMask) > 0
+                    fprintf('  Cleaning map: removing %d low-confidence surfels (confidence < %.2f)\n', ...
+                        nnz(~keepMask), minConfidence);
+                    staticMap.positions = staticMap.positions(:, keepMask);
+                    staticMap.normals = staticMap.normals(:, keepMask);
+                    staticMap.colours = staticMap.colours(:, keepMask);
+                    staticMap.confidence = staticMap.confidence(keepMask);
+                    staticMap.radius = staticMap.radius(keepMask);
+                end
+            end
+        else
+            warning('Frame %d: No static points to update map.', frameID);
         end
 
         dynamicCounts(idxFrame) = nnz(segRes.dynamicMask);
         staticCounts(idxFrame) = nnz(segRes.staticMask);
         poses(:, :, idxFrame) = currentPose;
         trajectory(:, idxFrame) = currentPose(1:3, 4);
+        
+        if USE_FRAME_TO_FRAME
+            Rw = currentPose(1:3, 1:3);
+            tw = currentPose(1:3, 4);
+            
+            staticPointsCam = pointsCam(:, segRes.staticMask);
+            staticNormalsCam = normalsCam(:, segRes.staticMask);
+            if size(staticPointsCam, 2) > 50
+                prevPointsWorld = Rw * staticPointsCam + tw;
+                prevNormalsWorld = normalizeColumns(Rw * staticNormalsCam);
+            else
+                if isempty(prevPointsWorld) || size(prevPointsWorld, 2) < 100
+                    prevPointsWorld = Rw * pointsCam + tw;
+                    prevNormalsWorld = normalizeColumns(Rw * normalsCam);
+                end
+            end
+        end
+        
+        if ENABLE_EVALUATION
+            [~,gtPoseIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
+            poseRow_gt = data.poseTruth(gtPoseIdx, :);
+            txyz_gt = poseRow_gt.txyz;
+            quat_gt = poseRow_gt.quat;
+            quat_tum_gt = [quat_gt(2), quat_gt(3), quat_gt(4), quat_gt(1)];
+            gtPoses(:, :, idxFrame) = tumPoseToTransform(txyz_gt, quat_tum_gt);
+            gtTrajectory(:, idxFrame) = gtPoses(1:3, 4, idxFrame);
+        end
 
-        % Visualization during processing
         if processing.enableVisualisation && mod(idxFrame - 1, processing.visualiseEvery) == 0
             try
                 visualizeProgress(staticMap, currentPose, pointsCam, segRes.staticMask, segRes.dynamicMask, trajectory(:, 1:idxFrame));
@@ -264,7 +462,6 @@ if processing.enableVisualisation
     fprintf('  Trajectory points: %d\n', size(trajectory, 2));
     fprintf('  Frame range: %d to %d\n', frameRange(1), frameRange(end));
 
-    % Only visualize if we have valid data
     if ~isempty(staticMap.positions) && size(staticMap.positions, 2) > 0 && ...
        ~isempty(trajectory) && size(trajectory, 2) >= 2
         try
@@ -286,15 +483,33 @@ else
     fprintf('[StaticFusion] Visualisation disabled (processing.enableVisualisation = false).\n');
 end
 
+%% Evaluation section
+if ENABLE_EVALUATION
+    fprintf('\n[StaticFusion] Evaluating against ground truth...\n');
+    evaluateTrajectory(poses, gtPoses, trajectory, gtTrajectory, frameRange);
+end
+
 %% Helper functions
 function frameData = loadFrameDataBonn(data, frameRange, localIdx, depthFilterOpts, denoiseOpts, normalOpts)
-% try
     frameID = frameRange(localIdx);
 
-    image = imread(fullfile(data.basedir,data.rgblist.filename(frameID)));
-
-    [~,depthIdx] = min(abs(data.rgblist.time_posix(frameID) - data.depthlist.time_posix));
-    depth = depthReadTUM(fullfile(data.basedir,data.depthlist.filename(depthIdx)));
+    rgb_path = data.image{localIdx};
+    depth_path = data.depth{localIdx};
+    
+    if ~exist(rgb_path, 'file')
+        warning('RGB file not found: %s', rgb_path);
+        frameData = struct('frameID', frameID, 'XYZcam', zeros(3,0), 'RGB', zeros(3,0), 'normalsCam', zeros(3,0));
+        return;
+    end
+    
+    if ~exist(depth_path, 'file')
+        warning('Depth file not found: %s', depth_path);
+        frameData = struct('frameID', frameID, 'XYZcam', zeros(3,0), 'RGB', zeros(3,0), 'normalsCam', zeros(3,0));
+        return;
+    end
+    
+    image = imread(rgb_path);
+    depth = depthReadTUM(depth_path);
 
     [XYZcam, RGB] = depthToPointCloudBonn(image, depth, 'depthFilter', depthFilterOpts);
     
@@ -325,10 +540,6 @@ function frameData = loadFrameDataBonn(data, frameRange, localIdx, depthFilterOp
     end
 
     frameData = struct('frameID', frameID, 'XYZcam', XYZcam, 'RGB', RGB, 'normalsCam', normalsCam);
-% catch ME
-%     warning('loadFrameData:Error', 'Error loading frame %d: %s', frameRange(localIdx), ME.message);
-%     frameData = struct('frameID', frameRange(localIdx), 'XYZcam', zeros(3,0), 'RGB', zeros(3,0), 'normalsCam', zeros(3,0));
-% end
 end
 
 function idx = selectSampleIndices(numPoints, downsample)
@@ -343,7 +554,6 @@ else
 end
 end
 
-% Visualization functions moved to visualization/visualizeProgress.m
 function args = structToNameValue(s)
 if isempty(s)
     args = {};
@@ -390,4 +600,66 @@ end
 error('Unsupported transform size %dx%d.', sz(1), sz(2));
 end
 
-% Visualization functions moved to visualization/visualizeStaticFusionResults.m
+function evaluateTrajectory(poses, gtPoses, trajectory, gtTrajectory, frameRange)
+    numFrames = size(poses, 3);
+    ate_translation = zeros(1, numFrames);
+    ate_rotation = zeros(1, numFrames);
+    
+    for i = 1:numFrames
+        t_est = poses(1:3, 4, i);
+        t_gt = gtPoses(1:3, 4, i);
+        ate_translation(i) = norm(t_est - t_gt);
+        
+        R_est = poses(1:3, 1:3, i);
+        R_gt = gtPoses(1:3, 1:3, i);
+        R_diff = R_est * R_gt';
+        trace_R = trace(R_diff);
+        trace_R = max(-1, min(1, trace_R));
+        angle_rad = acos((trace_R - 1) / 2);
+        ate_rotation(i) = rad2deg(angle_rad);
+    end
+    
+    fprintf('  Average Translation Error: %.4f m\n', mean(ate_translation));
+    fprintf('  Average Rotation Error: %.4f deg\n', mean(ate_rotation));
+    fprintf('  Max Translation Error: %.4f m\n', max(ate_translation));
+    fprintf('  Max Rotation Error: %.4f deg\n', max(ate_rotation));
+    fprintf('  RMSE Translation Error: %.4f m\n', sqrt(mean(ate_translation.^2)));
+    
+    figure('Name', 'Trajectory Evaluation');
+    
+    subplot(2, 2, 1);
+    plot(1:numFrames, ate_translation, 'b-', 'LineWidth', 2);
+    xlabel('Frame');
+    ylabel('Translation Error (m)');
+    title('Absolute Translation Error');
+    grid on;
+    
+    subplot(2, 2, 2);
+    plot(1:numFrames, ate_rotation, 'r-', 'LineWidth', 2);
+    xlabel('Frame');
+    ylabel('Rotation Error (deg)');
+    title('Absolute Rotation Error');
+    grid on;
+    
+    subplot(2, 2, 3);
+    plot3(trajectory(1, :), trajectory(2, :), trajectory(3, :), 'b-', 'LineWidth', 2);
+    hold on;
+    plot3(gtTrajectory(1, :), gtTrajectory(2, :), gtTrajectory(3, :), 'r--', 'LineWidth', 2);
+    xlabel('X (m)');
+    ylabel('Y (m)');
+    zlabel('Z (m)');
+    title('Trajectory Comparison');
+    legend('Estimated', 'Ground Truth', 'Location', 'best');
+    grid on;
+    axis equal;
+    
+    subplot(2, 2, 4);
+    plot(frameRange, ate_translation, 'b-', 'LineWidth', 2);
+    hold on;
+    plot(frameRange, ate_rotation / 10, 'r-', 'LineWidth', 2);
+    xlabel('Frame ID');
+    ylabel('Error');
+    title('Error Over Time');
+    legend('Translation (m)', 'Rotation (deg/10)', 'Location', 'best');
+    grid on;
+end

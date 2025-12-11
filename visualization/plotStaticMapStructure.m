@@ -1,19 +1,9 @@
 function plotStaticMapStructure(map, varargin)
-%PLOTSTATICMAPSTRUCTURE Visualize the contents of a surfel-based static map.
-%   PLOTSTATICMAPSTRUCTURE(map) creates a diagnostic figure that shows the
-%   surfel cloud and normals. The function expects a struct with the fields
-%   "positions", "normals", and optionally "colours".
-%
-%   Optional name-value pairs:
-%       'Downsample'   - positive integer to subsample surfels (default 5)
-%       'Title'        - title string for the figure (default 'Static Map Structure')
-%       'FigureHandle' - reuse an existing figure handle
-%
+% Visualize surfel-based static map structure
 narginchk(1, inf);
 
 validateattributes(map, {'struct'}, {'scalar'}, mfilename, 'map', 1);
 
-% Parse options
 parser = inputParser;
 parser.addParameter('Downsample', 5, @(x) isnumeric(x) && isscalar(x) && x > 0);
 parser.addParameter('Title', 'Static Map Structure', @(x) isstring(x) || ischar(x));
@@ -32,7 +22,6 @@ end
 positions = map.positions;
 numSurfels = size(positions, 2);
 
-% Optional fields
 hasColours = isfield(map, 'colours') && ~isempty(map.colours) && size(map.colours, 2) == numSurfels;
 hasNormals = isfield(map, 'normals') && ~isempty(map.normals) && size(map.normals, 2) == numSurfels;
 
@@ -41,7 +30,6 @@ if isempty(sampleIdx)
     sampleIdx = 1:numSurfels;
 end
 
-% Print summary to the command window for readability
 fprintf('\n[plotStaticMapStructure] %s\n', titleStr);
 fprintf('  Surfels              : %d (displaying %d)\n', numSurfels, numel(sampleIdx));
 fprintf('  Downsample step      : %d\n', downsample);
@@ -56,9 +44,8 @@ posMax = max(positions, [], 2);
 fprintf('  Position bounds (XYZ):\n');
 fprintf('    X: [%.3f, %.3f] m\n', posMin(1), posMax(1));
 fprintf('    Y: [%.3f, %.3f] m\n', posMin(2), posMax(2));
-fprintf('    Z: [%.3f, %.3f] m\n\n', posMin(3), posMax(3));
+    fprintf('    Z: [%.3f, %.3f] m\n\n', posMin(3), posMax(3));
 
-% Prepare figure
 if isempty(opts.FigureHandle)
     fig = figure('Name', titleStr, 'Color', 'w', 'Position', [100, 100, 1200, 600]);
 else
@@ -69,7 +56,6 @@ end
 tiledlayout(fig, 1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 sgtitle(fig, titleStr, 'FontSize', 14, 'FontWeight', 'bold');
 
-% Tile 1: 3D scatter of surfels
 nexttile;
 hold on;
 if hasColours
@@ -84,7 +70,6 @@ xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
 title(sprintf('Surfels (displayed %d / %d)', numel(sampleIdx), numSurfels));
 view(135, 30);
 
-% Tile 2: Normals visualization (if available)
 nexttile;
 if hasNormals
     quiver3(positions(1, sampleIdx), positions(2, sampleIdx), positions(3, sampleIdx), ...

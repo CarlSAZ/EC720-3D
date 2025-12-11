@@ -1,6 +1,4 @@
-%% VISUALIZE_STATIC_MAP
-% Build and visualise the static map structure from a single frame.
-% Usage: run this script directly inside MATLAB.
+% Build and visualize static map structure from a single frame
 
 clear; close all; clc;
 
@@ -14,9 +12,8 @@ end
 
 %% Configuration
 sequenceName = 'hotel_umd/maryland_hotel3';
-frameIdx = 1;                     % Frame index to load
+frameIdx = 1;
 
-% Pre-processing and normal estimation parameters (aligned with staticfusion_demo)
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
 normalOpts = struct('K', 25);
@@ -28,7 +25,7 @@ mapInitOpts = struct( ...
     'MaxConfidence', 12.0, ...
     'ConfidenceDecay', 0.02);
 
-%% Load data and build the static map
+%% Load data and build static map
 fprintf('[VisualizeStaticMap] Loading SUN3D frame %d of %s...\n', frameIdx, sequenceName);
 data = loadSUN3D(sequenceName, frameIdx);
 
@@ -61,7 +58,6 @@ if size(normalsCam, 2) ~= size(XYZcam, 2)
     normalsCam(3, :) = 1;
 end
 
-% Transform point cloud to world coordinates
 extrinsic = ensureHomogeneousTransform(data.extrinsicsC2W(:, :, frameIdx));
 Rwc = extrinsic(1:3, 1:3);
 twc = extrinsic(1:3, 4);
@@ -79,8 +75,6 @@ fprintf('[VisualizeStaticMap] Visualising static map structure...\n');
 plotStaticMapStructure(map, 'Downsample', 5, 'Title', sprintf('Static Map (Frame %d)', frameIdx));
 
 fprintf('[VisualizeStaticMap] Done.\n');
-
-%% Helper functions
 function args = structToArgs(s)
 if isempty(s)
     args = {};

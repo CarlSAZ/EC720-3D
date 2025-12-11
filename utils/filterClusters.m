@@ -1,13 +1,5 @@
 function [keepMask, labels] = filterClusters(points, varargin)
-%FILTERCLUSTERS Keep clusters that exceed a minimum size.
-%   [keepMask, labels] = FILTERCLUSTERS(points, opts) groups points using a
-%   radius-based region growing approach and returns a logical mask of
-%   points belonging to clusters with at least opts.minClusterSize members.
-%
-%   Inputs:
-%       points  - Nx3 or 3xN array of point coordinates
-%       opts.radius          - neighbourhood radius (default: 0.1 m)
-%       opts.minClusterSize  - minimum points per cluster (default: 30)
+% Keep clusters that exceed minimum size using radius-based region growing
 
 arguments
     points double

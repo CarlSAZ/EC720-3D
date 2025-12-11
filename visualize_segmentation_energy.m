@@ -1,6 +1,5 @@
 %% VISUALIZE_SEGMENTATION_ENERGY
-% Visualise the static / dynamic segmentation energy on a single frame.
-% Usage: run this script directly in MATLAB.
+% Visualize static/dynamic segmentation energy for a single frame
 
 clear; close all; clc;
 
@@ -14,10 +13,9 @@ end
 
 %% Configuration
 sequenceName = 'hotel_umd/maryland_hotel3';
-refFrameIdx = 1;          % Frame used to initialise the static map
-segFrameIdx = 2;          % Frame for segmentation visualisation
+refFrameIdx = 1;
+segFrameIdx = 2;
 
-% Processing parameters (aligned with staticfusion_demo)
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
 normalOpts = struct('K', 25);
@@ -35,7 +33,7 @@ segmentationOpts = struct( ...
     'EnergyThreshold', 2.5, ...
     'EnergyWeights', struct('geometry', 1.2, 'colour', 1.0, 'normal', 0.7, 'prior', 1.0), ...
     'MinConfidence', 0.2);
-sampleStep = 5;           % Downsampling for visualisation/segmentation
+sampleStep = 5;
 
 %% Load reference frame and build static map
 frameRef = loadFrame(sequenceName, refFrameIdx, depthFilterOpts, denoiseOpts, normalOpts);
@@ -56,7 +54,7 @@ normalsCam = frameSeg.normalsCam(:, sampleIdx);
 %% Predict static map into segmentation frame
 prediction = predictStaticMap(staticMap, frameSeg.Twc);
 
-%% Run static / dynamic segmentation
+%% Run static/dynamic segmentation
 segArgs = [structToNameValue(segmentationOpts), {'NormalsCam', normalsCam}];
 segResult = estimateStaticMask(pointsCam, coloursCam, prediction, segArgs{:});
 
@@ -68,14 +66,13 @@ fprintf('  Sampled points  : %d\n', numel(segResult.staticMask));
 fprintf('  Static points   : %d\n', numStatic);
 fprintf('  Dynamic points  : %d\n', numDynamic);
 fprintf('  Static ratio    : %.1f%%%%\n', 100 * numStatic / max(1, numStatic + numDynamic));
-fprintf('  Energy (min/max): [%.3f, %.3f]\n', min(segResult.energy), max(segResult.energy));
+    fprintf('  Energy (min/max): [%.3f, %.3f]\n', min(segResult.energy), max(segResult.energy));
 
-%% Visualisation
+%% Visualization
 figure('Name', sprintf('Segmentation Energy (Frame %d)', segFrameIdx), 'Color', 'w', ...
     'Position', [100, 100, 1200, 600]);
 tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
-% Left: camera-frame classification
 nexttile;
 hold on;
 staticPts = pointsCam(:, segResult.staticMask);
@@ -91,7 +88,6 @@ legend({'Static', 'Dynamic'}, 'Location', 'best');
 axis equal; grid on; view(135, 30);
 title(sprintf('Camera frame classification (Frame %d)', segFrameIdx));
 
-% Right: energy histogram with static/dynamic overlay
 nexttile;
 energyStatic = segResult.energy(segResult.staticMask);
 energyDynamic = segResult.energy(segResult.dynamicMask);

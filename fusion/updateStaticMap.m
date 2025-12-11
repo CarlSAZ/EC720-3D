@@ -1,22 +1,5 @@
 function map = updateStaticMap(map, Twc, staticPointsCam, staticNormalsCam, staticColours, varargin)
-%UPDATESTATICMAP Fuse observed static points into the background map.
-%   map = UPDATESTATICMAP(map, Twc, staticPointsCam, staticNormalsCam, staticColours)
-%   integrates camera-frame static observations into the world-frame map.
-%
-%   Inputs:
-%       map                - background map struct from INITIALIZESTATICMAP
-%       Twc                - 4x4 camera-to-world transform for current frame
-%       staticPointsCam    - 3xM points in camera coordinates (metres)
-%       staticNormalsCam   - 3xM normals in camera coordinates
-%       staticColours      - 3xM colours in [0, 1]
-%
-%   Name-value pairs:
-%       'MergeRadius'        - override map.params.mergeRadius
-%       'ObservationWeight'  - override map.params.observationWeight
-%       'MaxConfidence'      - override map.params.maxConfidence
-%       'MinConfidence'      - override map.params.minConfidence
-%       'ConfidenceDecay'    - override map.params.confidenceDecay
-%       'DefaultRadius'      - override map.params.defaultRadius
+% Fuse observed static points into background map
 
 narginchk(5, inf);
 validateStaticMap(map);
@@ -35,12 +18,10 @@ addParameter(parser, 'DefaultRadius', map.params.defaultRadius, @(x) validateatt
 parse(parser, varargin{:});
 opts = parser.Results;
 
-% Apply global confidence decay before integrating new data.
 if opts.ConfidenceDecay > 0 && ~isempty(map.confidence)
     map.confidence = max(opts.MinConfidence, map.confidence * (1 - opts.ConfidenceDecay));
 end
 
-% Transform observations into world frame.
 Rw = Twc(1:3, 1:3);
 tw = Twc(1:3, 4);
 pointsWorld = Rw * staticPointsCam + tw;
@@ -61,7 +42,6 @@ if isempty(map.positions)
     return;
 end
 
-% Validate inputs before knnsearch
 if any(isnan(map.positions(:))) || any(isinf(map.positions(:)))
     error('updateStaticMap:InvalidMap', 'Map contains NaN or Inf values.');
 end
@@ -81,7 +61,6 @@ matchedMask = distances <= opts.MergeRadius;
 
 obsWeight = opts.ObservationWeight;
 
-% Update existing surfels.
 matchedIdx = find(matchedMask);
 for k = matchedIdx(:)'
     if k < 1 || k > numel(indices)
@@ -107,7 +86,6 @@ for k = matchedIdx(:)'
     map.confidence(surfelIdx) = min(opts.MaxConfidence, map.confidence(surfelIdx) + obsWeight);
 end
 
-% Insert new surfels for unmatched observations.
 newMask = ~matchedMask;
 numNew = nnz(newMask);
 if numNew > 0
@@ -118,11 +96,9 @@ if numNew > 0
     map.radius = [map.radius, ones(1, numNew) * opts.DefaultRadius];
 end
 
-% Safeguard confidence range.
 map.confidence = min(opts.MaxConfidence, max(opts.MinConfidence, map.confidence));
 end
 
-%% Local helpers
 function validateStaticMap(map)
 if ~isstruct(map)
     error('Static map must be a struct.');

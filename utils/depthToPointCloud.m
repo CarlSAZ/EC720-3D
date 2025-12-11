@@ -1,12 +1,5 @@
 function [XYZ, RGB] = depthToPointCloud(image, depth, K, varargin)
-%DEPTHTOPOINTCLOUD Convert RGB-D data into a 3xN point cloud with colours.
-%   [XYZ, RGB] = DEPTHTOPOINTCLOUD(image, depth, K, ...) applies depth
-%   filtering, back-projects valid pixels to 3D camera coordinates, and
-%   returns XYZ in metres and RGB in the range [0,1].
-%
-%   Name-value pairs:
-%       'depthFilter'   - struct passed to filterDepth
-%       'keepMask'      - logical mask (same size as depth) to pre-filter
+% Convert RGB-D data to 3xN point cloud with colors
 
 narginchk(3, inf);
 

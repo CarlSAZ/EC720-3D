@@ -1,16 +1,8 @@
 function visualizeProgress(staticMap, currentPose, pointsCam, staticMask, dynamicMask, trajectory, varargin)
-%VISUALIZEPROGRESS Show real-time progress during StaticFusion processing.
-%   visualizeProgress(staticMap, currentPose, pointsCam, staticMask, dynamicMask, trajectory)
-%   displays the current state of the static map and frame segmentation.
-%
-%   Optional name-value pairs:
-%       'DownsampleMap'    - downsample factor for map (default 3)
-%       'DownsampleFrame'  - downsample factor for frame points (default 5)
-%       'FigureNumber'     - figure number to use (default 100)
+% Show real-time progress during StaticFusion processing
 
 narginchk(6, inf);
 
-% Parse options
 p = inputParser;
 addParameter(p, 'DownsampleMap', 3, @(x) isnumeric(x) && x > 0);
 addParameter(p, 'DownsampleFrame', 5, @(x) isnumeric(x) && x > 0);
@@ -18,7 +10,6 @@ addParameter(p, 'FigureNumber', 100, @(x) isnumeric(x) && x > 0);
 parse(p, varargin{:});
 opts = p.Results;
 
-% Validate inputs
 if isempty(staticMap) || ~isfield(staticMap, 'positions') || isempty(staticMap.positions)
     return;
 end
@@ -27,7 +18,6 @@ if isempty(pointsCam) || size(pointsCam, 2) == 0
 end
 
 try
-    % Transform points to world coordinates
     Rw = currentPose(1:3, 1:3);
     tw = currentPose(1:3, 4);
 
@@ -44,13 +34,11 @@ catch ME
     return;
 end
 
-% Create or clear figure
 fig = figure(opts.FigureNumber);
 clf(fig);
 set(fig, 'Visible', 'on', 'Name', 'StaticFusion Progress');
 drawnow;
 
-% Left subplot: Static map with trajectory
 subplot(1, 2, 1);
 hold on;
 mapIdx = 1:opts.DownsampleMap:size(staticMap.positions, 2);
@@ -83,7 +71,6 @@ axis equal; grid on;
 xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
 view(135, 30);
 
-% Right subplot: Current frame segmentation
 subplot(1, 2, 2);
 hold on;
 if ~isempty(staticWorld) && size(staticWorld, 2) > 0

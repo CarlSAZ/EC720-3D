@@ -1,9 +1,8 @@
-%% MINIMAL TEST - Find crash location
+%% MINIMAL TEST
 clear; close all; clc;
 
 fprintf('=== MINIMAL TEST START ===\n');
 
-% Setup paths
 scriptDir = fileparts(mfilename('fullpath'));
 if exist('initializeStaticMap', 'file') ~= 2
     startupPath = fullfile(scriptDir, 'startup.m');
@@ -78,7 +77,7 @@ end
 
 fprintf('Step 7: Estimate static mask (with small subset)...\n');
 try
-    sampleIdx = 1:10:size(XYZcam, 2);  % Very sparse sampling
+    sampleIdx = 1:10:size(XYZcam, 2);
     if isempty(sampleIdx)
         error('No points to sample');
     end

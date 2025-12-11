@@ -1,17 +1,5 @@
 function visualizeChanges(pcBase, pcOverlay, addedXYZ, removedXYZ, varargin)
-%VISUALIZECHANGES Render base point cloud with added/removed points.
-%   visualizeChanges(pcBase, pcOverlay, addedXYZ, removedXYZ, name/value pairs)
-%   pcBase    - struct with fields XYZ (3xN) and RGB (3xN) for reference
-%   pcOverlay - same structure, typically the comparison frame
-%   addedXYZ  - 3xK coordinates of additions (B w.r.t A)
-%   removedXYZ- 3xL coordinates of removals
-%
-%   Name-value pairs:
-%       'downsample'  - only plot every Nth base point (default 5)
-%       'views'       - cell array of [az,el] view angles (default single)
-%       'showLegend'  - logical (default true)
-%       'markerSize'  - marker size for change points (default 12)
-%       'savePath'    - optional folder to save PNG snapshots
+% Render base point cloud with added/removed points
 
 narginchk(4, inf);
 validateattributes(pcBase, {'struct'}, {}, mfilename, 'pcBase', 1);
