@@ -1,11 +1,5 @@
 function diff = computePointCloudDiff(pcA, pcB, varargin)
-%COMPUTEPOINTCLOUDDIFF Detect changes between two point clouds.
-%   diff = COMPUTEPOINTCLOUDDIFF(pcA, pcB, ...) compares point clouds A and
-%   B in world coordinates using nearest-neighbour distances.
-%
-%   Name-value pairs:
-%       'threshold'     - distance threshold in metres (default 0.05)
-%       'requireMutual' - enforce mutual inconsistency (default true)
+% Detect changes between two point clouds using nearest-neighbour distances
 
 narginchk(2, inf);
 validateattributes(pcA, {'struct'}, {}, mfilename, 'pcA', 1);

@@ -1,12 +1,5 @@
 function depthFiltered = filterDepth(depth, varargin)
-%FILTERDEPTH Apply basic filtering to a raw depth map.
-%   depthFiltered = FILTERDEPTH(depth, ...) removes invalid depth values
-%   and optionally clips or smooths the depth map. Name-value pairs:
-%       'minDepth'     - minimum valid depth in metres (default: 0)
-%       'maxDepth'     - maximum valid depth in metres (default: inf)
-%       'medianKernel' - size of the median filter window (default: 0, skip)
-%
-%   Depth values equal to zero or NaN remain zero in the output.
+% Apply basic filtering to raw depth map
 
 narginchk(1, inf);
 validateattributes(depth, {'double','single'}, {'2d'}, mfilename, 'depth', 1);
@@ -37,10 +30,10 @@ depthFiltered(invalidMask) = 0;
 if opts.medianKernel >= 3
     k = opts.medianKernel;
     if mod(k,2) == 0
-        k = k + 1; % enforce odd window size
+        k = k + 1;
     end
     depthFiltered = medfilt2(depthFiltered, [k, k], 'symmetric');
-    depthFiltered(invalidMask) = 0; % ensure invalid stays zero after filtering
+    depthFiltered(invalidMask) = 0;
 end
 
 end

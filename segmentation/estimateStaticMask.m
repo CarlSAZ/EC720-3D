@@ -1,36 +1,5 @@
 function result = estimateStaticMask(pointsCam, coloursCam, mapPrediction, varargin)
-%ESTIMATESTATICMASK Segment static and dynamic observations via energy terms.
-%   result = ESTIMATESTATICMASK(pointsCam, coloursCam, mapPrediction) compares
-%   the current camera-frame observations against a predicted static map (from
-%   PREDICTSTATICMAP) to compute per-point energies and a static mask.
-%
-%   Inputs:
-%       pointsCam      - 3xN coordinates in the current camera frame (metres)
-%       coloursCam     - 3xN RGB values in [0, 1]
-%       mapPrediction  - struct with fields XYZcam, normalsCam, colours,
-%                        confidence (as returned by PREDICTSTATICMAP)
-%
-%   Name-value pairs:
-%       'NormalsCam'          - 3xN observed normals (optional)
-%       'GeometryThreshold'   - point-to-plane threshold (default 0.04 m)
-%       'ColorThreshold'      - colour difference threshold (default 0.15)
-%       'NormalThreshold'     - angle threshold in radians (default pi/4)
-%       'EnergyWeights'       - struct with fields geometry, colour,
-%                               normal, prior (defaults [1,1,0.5,1])
-%       'EnergyThreshold'     - classify as static if energy <= threshold (1.5)
-%       'PriorDynamicMask'    - logical 1xN prior dynamic flag (optional)
-%       'ConfidenceWeighting' - logical flag (default true)
-%       'MinConfidence'       - lower bound when normalising confidence (0.1)
-%
-%   Output struct fields:
-%       staticMask       - logical 1xN static labels
-%       dynamicMask      - logical 1xN dynamic labels
-%       energy           - 1xN combined energy values
-%       geoResidual      - 1xN point-to-plane residuals
-%       colourResidual   - 1xN colour residuals
-%       normalResidual   - 1xN normal angle residuals
-%       weights          - 1xN confidence weights applied
-%       correspondences  - indices into the predicted map
+% Segment static and dynamic observations via energy terms
 
 narginchk(3, inf);
 validateattributes(pointsCam, {'double'}, {'size',[3, NaN]}, mfilename, 'pointsCam', 1);
@@ -81,7 +50,6 @@ if isempty(mapPrediction.XYZcam)
     return;
 end
 
-% Validate inputs before knnsearch
 if any(isnan(mapPrediction.XYZcam(:))) || any(isinf(mapPrediction.XYZcam(:)))
     error('estimateStaticMask:InvalidMap', 'Map prediction contains NaN or Inf values.');
 end
@@ -98,7 +66,6 @@ catch ME
         size(pointsCam, 1), size(pointsCam, 2));
 end
 
-% Validate indices
 if any(indices < 1) || any(indices > size(mapPrediction.XYZcam, 2))
     error('estimateStaticMask:InvalidIndices', ...
         'KNN search returned invalid indices. Range: [%d, %d], Map size: %d', ...
@@ -125,7 +92,6 @@ end
 priorEnergy = zeros(1, numPoints);
 priorEnergy(opts.PriorDynamicMask) = weightsCfg.prior;
 
-% Normalised residuals.
 geoNorm = geoResidual / opts.GeometryThreshold;
 colourNorm = colourResidual / opts.ColorThreshold;
 if ~isempty(opts.NormalsCam)
@@ -150,11 +116,8 @@ else
     weights = ones(1, numPoints);
 end
 
-% Combine raw energy with confidence weights. We want lower-confidence
-% correspondences to contribute less, so multiply instead of divide.
 energy = rawEnergy .* weights;
 
-% Boolean gating based on individual residual thresholds
 geoMask = geoResidual <= opts.GeometryThreshold;
 colourMask = colourResidual <= opts.ColorThreshold;
 if ~isempty(opts.NormalsCam)
@@ -166,7 +129,6 @@ end
 baseStaticMask = geoMask & colourMask & normalMask;
 energyStaticMask = energy <= opts.EnergyThreshold;
 
-% Combine gating with energy-based decision
 staticMask = baseStaticMask | (energyStaticMask & geoMask);
 dynamicMask = ~staticMask;
 

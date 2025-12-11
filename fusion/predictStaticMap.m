@@ -1,10 +1,5 @@
 function prediction = predictStaticMap(map, Twc, varargin)
-%PREDICTSTATICMAP Transform static map surfels into the current camera frame.
-%   prediction = PREDICTSTATICMAP(map, Twc) returns the surfel attributes
-%   expressed in the camera frame given the camera-to-world pose Twc (4x4).
-%
-%   Name-value pairs:
-%       'ReturnWorld' - if true (default), include world-frame copies.
+% Transform static map surfels into current camera frame
 
 narginchk(2, inf);
 validateStaticMap(map);
@@ -39,7 +34,6 @@ if opts.ReturnWorld
 end
 end
 
-%% Local helper
 function validateStaticMap(map)
 if ~isstruct(map)
     error('Static map must be a struct.');

@@ -1,25 +1,5 @@
 function map = initializeStaticMap(pointCloud, normals, varargin)
-%INITIALIZESTATICMAP Create a surfel-based static background map.
-%   map = INITIALIZESTATICMAP(pointCloud, normals) instantiates a static
-%   background map using the supplied world-frame point cloud structure.
-%
-%   Inputs:
-%       pointCloud.XYZ  - 3xN world coordinates (metres)
-%       pointCloud.RGB  - 3xN colours in [0, 1]
-%       normals         - 3xN surfel normals (world frame)
-%
-%   Name-value pairs:
-%       'DefaultConfidence'  - initial confidence per surfel (default: 1)
-%       'DefaultRadius'      - nominal surfel radius in metres (default: 0.03)
-%       'MergeRadius'        - association radius when fusing (default: 0.05)
-%       'ObservationWeight'  - incremental observation weight (default: 1)
-%       'MaxConfidence'      - cap for surfel confidence (default: 10)
-%       'MinConfidence'      - minimum confidence value (default: 0.1)
-%       'ConfidenceDecay'    - per-update decay factor (default: 0)
-%
-%   Output:
-%       map struct with fields positions, normals, colours, confidence,
-%       radius, and params for subsequent updates.
+% Create surfel-based static background map
 
 narginchk(2, inf);
 validateattributes(pointCloud, {'struct'}, {'scalar'}, mfilename, 'pointCloud', 1);
@@ -75,7 +55,6 @@ map.params = struct( ...
     'confidenceDecay', opts.ConfidenceDecay);
 end
 
-%% Local helper
 function normalsOut = normalizeNormals(normalsIn)
 normalsOut = zeros(size(normalsIn));
 if isempty(normalsIn)

@@ -1,12 +1,11 @@
 %% DATA LOADING AND PREPROCESSING TEST SCRIPT
-% This script tests the complete data loading and preprocessing pipeline
-% with visualization at each step to verify correctness.
+% Test data loading and preprocessing pipeline with visualization
 
 clear; close all; clc;
 
 fprintf('=== Data Loading and Preprocessing Test ===\n\n');
 
-%% Step 0: Setup paths
+%% Setup paths
 scriptDir = fileparts(mfilename('fullpath'));
 if exist('loadSUN3D', 'file') ~= 2
     startupPath = fullfile(scriptDir, 'startup.m');
@@ -17,7 +16,7 @@ if exist('loadSUN3D', 'file') ~= 2
     end
 end
 
-%% Step 1: Configuration (matching staticfusion_demo.m)
+%% Configuration
 sequenceName = 'hotel_umd/maryland_hotel3';
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
@@ -31,9 +30,9 @@ fprintf('  Depth filter: min=%.1fm, max=%.1fm, median=%d\n', ...
 fprintf('  Denoise: radius=%.2fm, minNeighbors=%d\n', ...
     denoiseOpts.radius, denoiseOpts.minNeighbors);
 fprintf('  Normals: K=%d\n', normalOpts.K);
-fprintf('  Downsample: %d\n\n', processing.downsample);
+    fprintf('  Downsample: %d\n\n', processing.downsample);
 
-%% Step 2: Load SUN3D sequence data
+%% Load SUN3D sequence data
 fprintf('Step 1: Loading SUN3D sequence data...\n');
 try
     data = loadSUN3D(sequenceName, 1);  % Load first frame only
@@ -49,7 +48,7 @@ catch ME
     return;
 end
 
-%% Step 3: Read RGB image and depth map
+%% Read RGB image and depth map
 fprintf('\nStep 2: Reading RGB image and depth map...\n');
 try
     image = imread(data.image{1});
@@ -69,21 +68,20 @@ catch ME
     return;
 end
 
-% Visualization: Step 2
 figure('Name', 'Step 2: Raw RGB Image and Depth Map', 'Position', [100, 100, 1000, 400]);
 subplot(1, 2, 1);
 imshow(image);
 title('Raw RGB Image');
 subplot(1, 2, 2);
 imagesc(depth_raw);
-axis image;  % Keep aspect ratio same as original image
-axis off;    % Remove axes
+axis image;
+axis off;
 colorbar;
 title('Raw Depth Map (meters)');
 colormap(gca, 'jet');
 fprintf('  [VISUALIZATION] Figure 1: Raw RGB and depth map\n');
 
-%% Step 4: Convert depth to point cloud (includes depth filtering)
+%% Convert depth to point cloud
 fprintf('\nStep 3: Converting depth to point cloud (with depth filtering)...\n');
 try
     [XYZcam, RGB] = depthToPointCloud(image, depth_raw, data.K, 'depthFilter', depthFilterOpts);
@@ -99,10 +97,8 @@ catch ME
     return;
 end
 
-% Visualization: Step 3
 figure('Name', 'Step 3: Point Cloud (Camera Coordinates)', 'Position', [150, 150, 800, 600]);
 if size(XYZcam, 2) > 0
-    % Downsample for visualization
     viz_idx = 1:10:size(XYZcam, 2);
     scatter3(XYZcam(1, viz_idx), XYZcam(2, viz_idx), XYZcam(3, viz_idx), ...
         10, RGB(:, viz_idx)', 'filled');
@@ -111,13 +107,11 @@ if size(XYZcam, 2) > 0
     axis equal;
     grid on;
     colorbar;
-    % Set camera view: view from behind camera looking along -Z direction
-    % This matches the RGB image orientation (X right, Y down, Z forward)
-    view(0, -90);  % Azimuth=0 (along X), Elevation=-90 (from above, looking down)
+    view(0, -90);
 end
 fprintf('  [VISUALIZATION] Figure 2: Point cloud in camera coordinates\n');
 
-%% Step 5: Denoise point cloud
+%% Denoise point cloud
 fprintf('\nStep 4: Denoising point cloud...\n');
 try
     numPoints_before = size(XYZcam, 2);
@@ -135,7 +129,6 @@ catch ME
     return;
 end
 
-% Visualization: Step 4
 figure('Name', 'Step 4: Denoised Point Cloud', 'Position', [200, 200, 800, 600]);
 if size(XYZcam, 2) > 0
     viz_idx = 1:10:size(XYZcam, 2);
@@ -146,12 +139,11 @@ if size(XYZcam, 2) > 0
     axis equal;
     grid on;
     colorbar;
-    % Set camera view: view from behind camera looking along -Z direction
-    view(0, -90);  % Azimuth=0 (along X), Elevation=-90 (from above, looking down)
+    view(0, -90);
 end
 fprintf('  [VISUALIZATION] Figure 3: Denoised point cloud\n');
 
-%% Step 6: Estimate normals
+%% Estimate normals
 fprintf('\nStep 5: Estimating surface normals...\n');
 try
     normalsCam = estimateNormals(XYZcam, 'K', normalOpts.K, 'ViewPoint', [0; 0; 0]);
@@ -169,15 +161,13 @@ catch ME
     return;
 end
 
-% Visualization: Step 5
 figure('Name', 'Step 5: Point Cloud with Normals', 'Position', [250, 250, 800, 600]);
 if size(XYZcam, 2) > 0
-    viz_idx = 1:50:size(XYZcam, 2);  % More sparse for normals visualization
+    viz_idx = 1:50:size(XYZcam, 2);
     scatter3(XYZcam(1, viz_idx), XYZcam(2, viz_idx), XYZcam(3, viz_idx), ...
         20, RGB(:, viz_idx)', 'filled');
     hold on;
-    % Draw normals
-    scale = 0.05;  % Scale factor for normal vectors
+    scale = 0.05;
     quiver3(XYZcam(1, viz_idx), XYZcam(2, viz_idx), XYZcam(3, viz_idx), ...
         normalsCam(1, viz_idx)*scale, normalsCam(2, viz_idx)*scale, normalsCam(3, viz_idx)*scale, ...
         'r', 'LineWidth', 1);
@@ -187,12 +177,11 @@ if size(XYZcam, 2) > 0
     axis equal;
     grid on;
     legend('Points', 'Normals', 'Location', 'best');
-    % Set camera view: view from behind camera looking along -Z direction
-    view(0, -90);  % Azimuth=0 (along X), Elevation=-90 (from above, looking down)
+    view(0, -90);
 end
 fprintf('  [VISUALIZATION] Figure 4: Point cloud with normals\n');
 
-%% Step 7: Data sampling (downsampling)
+%% Data sampling
 fprintf('\nStep 6: Data sampling (downsampling)...\n');
 try
     numPoints_before = size(XYZcam, 2);
@@ -210,7 +199,6 @@ catch ME
     return;
 end
 
-% Visualization: Step 6
 figure('Name', 'Step 6: Downsampled Point Cloud', 'Position', [300, 300, 800, 600]);
 if size(XYZcamSample, 2) > 0
     scatter3(XYZcamSample(1, :), XYZcamSample(2, :), XYZcamSample(3, :), ...
@@ -220,12 +208,11 @@ if size(XYZcamSample, 2) > 0
     axis equal;
     grid on;
     colorbar;
-    % Set camera view: view from behind camera looking along -Z direction
-    view(0, -90);  % Azimuth=0 (along X), Elevation=-90 (from above, looking down)
+    view(0, -90);
 end
 fprintf('  [VISUALIZATION] Figure 5: Downsampled point cloud\n');
 
-%% Step 8: Coordinate transformation (camera to world)
+%% Coordinate transformation
 fprintf('\nStep 7: Coordinate transformation (camera -> world)...\n');
 try
     firstPose = ensureHomogeneousTransform(data.extrinsicsC2W(:, :, 1));
@@ -251,7 +238,6 @@ catch ME
     return;
 end
 
-% Visualization: Step 7
 figure('Name', 'Step 7: Point Cloud in World Coordinates', 'Position', [350, 350, 800, 600]);
 if size(XYZworld, 2) > 0
     scatter3(XYZworld(1, :), XYZworld(2, :), XYZworld(3, :), ...
@@ -261,30 +247,26 @@ if size(XYZworld, 2) > 0
     axis equal;
     grid on;
     colorbar;
-    % Set a good viewing angle for world coordinates (3D perspective view)
-    view(135, 30);  % Azimuth=135, Elevation=30 (diagonal view from above)
+    view(135, 30);
 end
 fprintf('  [VISUALIZATION] Figure 6: Point cloud in world coordinates\n');
 
-%% Step 9: Final summary visualization
+%% Final summary visualization
 fprintf('\nStep 8: Final summary visualization...\n');
 figure('Name', 'Final Summary: Complete Pipeline', 'Position', [400, 400, 1400, 500]);
 
-% Subplot 1: Original RGB image
 subplot(1, 4, 1);
 imshow(image);
 title('1. Original RGB Image');
 
-% Subplot 2: Depth map
 subplot(1, 4, 2);
 imagesc(depth_raw);
-axis image;  % Keep aspect ratio same as original image
-axis off;    % Remove axes
+axis image;
+axis off;
 colorbar;
 title('2. Raw Depth Map');
 colormap(gca, 'jet');
 
-% Subplot 3: Point cloud in camera coordinates
 subplot(1, 4, 3);
 if size(XYZcamSample, 2) > 0
     viz_idx = 1:5:size(XYZcamSample, 2);
@@ -294,11 +276,9 @@ if size(XYZcamSample, 2) > 0
     title('3. Camera Coordinates (camera view)');
     axis equal;
     grid on;
-    % Set camera view: view from behind camera looking along -Z direction
-    view(0, -90);  % Azimuth=0 (along X), Elevation=-90 (from above, looking down)
+    view(0, -90);
 end
 
-% Subplot 4: Point cloud in world coordinates
 subplot(1, 4, 4);
 if size(XYZworld, 2) > 0
     viz_idx = 1:5:size(XYZworld, 2);
@@ -308,8 +288,7 @@ if size(XYZworld, 2) > 0
     title('4. World Coordinates (3D view)');
     axis equal;
     grid on;
-    % Set a good viewing angle for world coordinates (3D perspective view)
-    view(135, 30);  % Azimuth=135, Elevation=30 (diagonal view from above)
+    view(135, 30);
 end
 
 fprintf('  [VISUALIZATION] Figure 7: Complete pipeline summary\n');
@@ -322,9 +301,7 @@ fprintf('  Final colors: %d points\n', size(RGBsample, 2));
 fprintf('  Final normals: %d points\n', size(normalsWorld, 2));
 fprintf('\nAll visualizations are displayed in separate figures.\n');
 
-%% Helper functions
 function idx = selectSampleIndices(numPoints, downsample)
-% Select sample indices for downsampling
 if numPoints == 0
     idx = zeros(1, 0);
     return;
@@ -337,14 +314,12 @@ end
 end
 
 function normals = normalizeColumns(vectors)
-% Normalize each column of the input matrix to unit length
 norms = sqrt(sum(vectors.^2, 1));
 norms(norms < eps) = 1;
 normals = vectors ./ norms;
 end
 
 function T = ensureHomogeneousTransform(Traw)
-% Ensure the transformation matrix is 4x4 homogeneous format
 if isempty(Traw)
     error('Empty transform encountered.');
 end

@@ -29,13 +29,11 @@ end
 sequenceName = 'hotel_umd/maryland_hotel3';
 frameIdx = 1;
 
-% Preprocessing parameters (matching staticfusion_demo.m)
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
 normalOpts = struct('K', 25);
-processing.downsample = 5;  % Downsample for visualization
+processing.downsample = 5;
 
-% Map initialization parameters
 mapInitOpts = struct( ...
     'DefaultConfidence', 3.0, ...
     'DefaultRadius', 0.04, ...
@@ -67,7 +65,6 @@ depth = double(depthRead(data.depth{1}));
 
 normalsCam = estimateNormals(XYZcam, 'K', normalOpts.K, 'ViewPoint', [0; 0; 0]);
 
-% Transform to world coordinates
 firstPose = ensureHomogeneousTransform(data.extrinsicsC2W(:, :, frameIdx));
 Rw = firstPose(1:3, 1:3);
 tw = firstPose(1:3, 4);
@@ -75,7 +72,6 @@ tw = firstPose(1:3, 4);
 XYZworld = Rw * XYZcam + tw;
 normalsWorld = normalizeColumns(Rw * normalsCam);
 
-% Downsample for visualization
 sampleIdx = 1:processing.downsample:size(XYZworld, 2);
 XYZworldSample = XYZworld(:, sampleIdx);
 RGBsample = RGB(:, sampleIdx);
@@ -109,7 +105,6 @@ fprintf('Step 4: Creating separate visualizations for each step...\n');
 
 mapSampleIdx = 1:processing.downsample:size(staticMap.positions, 2);
 
-%% Figure 1: Original RGB Image
 fig1 = figure('Name', 'Step 1: Original RGB Image', ...
     'Position', [50, 50, 800, 600], 'Color', 'w');
 imshow(image);
@@ -117,7 +112,6 @@ title('Step 1: Original RGB Image', 'FontSize', 14, 'FontWeight', 'bold');
 xlabel(sprintf('Frame %d from %s', frameIdx, sequenceName), 'FontSize', 12);
 fprintf('  Created Figure 1: Original RGB Image\n');
 
-%% Figure 2: Input Point Cloud (World Coordinates)
 fig2 = figure('Name', 'Step 2: Input Point Cloud', ...
     'Position', [100, 100, 900, 700], 'Color', 'w');
 hold on;
@@ -134,14 +128,11 @@ c = colorbar;
 c.Label.String = 'RGB Color';
 fprintf('  Created Figure 2: Input Point Cloud\n');
 
-%% Figure 3: Input Normals Visualization
 fig3 = figure('Name', 'Step 3: Input Normals', ...
     'Position', [150, 150, 900, 700], 'Color', 'w');
 hold on;
-% Show points
 scatter3(XYZworldSample(1, :), XYZworldSample(2, :), XYZworldSample(3, :), ...
     5, 'b', '.');
-% Show normals (every 10th for clarity)
 normalSample = 1:10:size(normalsWorldSample, 2);
 quiver3(XYZworldSample(1, normalSample), ...
         XYZworldSample(2, normalSample), ...
@@ -160,7 +151,6 @@ view(135, 30);
 legend('Points', 'Normals', 'Location', 'best', 'FontSize', 11);
 fprintf('  Created Figure 3: Input Normals\n');
 
-%% Figure 4: Surfel Positions (map.positions)
 fig4 = figure('Name', 'Step 4: Surfel Positions', ...
     'Position', [200, 200, 900, 700], 'Color', 'w');
 scatter3(staticMap.positions(1, mapSampleIdx), ...
@@ -178,7 +168,6 @@ c = colorbar;
 c.Label.String = 'RGB Color';
 fprintf('  Created Figure 4: Surfel Positions\n');
 
-%% Figure 5: Surfel Normals (normalized)
 fig5 = figure('Name', 'Step 5: Surfel Normals', ...
     'Position', [250, 250, 900, 700], 'Color', 'w');
 hold on;
@@ -205,7 +194,6 @@ view(135, 30);
 legend('Surfels', 'Normals', 'Location', 'best', 'FontSize', 11);
 fprintf('  Created Figure 5: Surfel Normals\n');
 
-%% Figure 6: Surfel Colors
 fig6 = figure('Name', 'Step 6: Surfel Colors', ...
     'Position', [300, 300, 900, 700], 'Color', 'w');
 scatter3(staticMap.positions(1, mapSampleIdx), ...
@@ -223,7 +211,6 @@ c = colorbar;
 c.Label.String = 'RGB Color';
 fprintf('  Created Figure 6: Surfel Colors\n');
 
-%% Figure 7: Surfel Confidence
 fig7 = figure('Name', 'Step 7: Surfel Confidence', ...
     'Position', [350, 350, 900, 700], 'Color', 'w');
 confSample = staticMap.confidence(mapSampleIdx);
@@ -243,14 +230,13 @@ c.Label.String = 'Confidence';
 colormap(gca, 'hot');
 fprintf('  Created Figure 7: Surfel Confidence\n');
 
-%% Figure 8: Surfel Radius
 fig8 = figure('Name', 'Step 8: Surfel Radius', ...
     'Position', [400, 400, 900, 700], 'Color', 'w');
 radiusSample = staticMap.radius(mapSampleIdx);
 scatter3(staticMap.positions(1, mapSampleIdx), ...
          staticMap.positions(2, mapSampleIdx), ...
          staticMap.positions(3, mapSampleIdx), ...
-         20, radiusSample' * 100, 'filled');  % Scale for visualization
+         20, radiusSample' * 100, 'filled');
 axis equal; grid on;
 xlabel('X (m)', 'FontSize', 12); 
 ylabel('Y (m)', 'FontSize', 12); 
@@ -263,16 +249,13 @@ c.Label.String = 'Radius (cm)';
 colormap(gca, 'cool');
 fprintf('  Created Figure 8: Surfel Radius\n');
 
-%% Figure 9: Complete Surfel Map with All Attributes
 fig9 = figure('Name', 'Step 9: Complete Surfel Map', ...
     'Position', [450, 450, 900, 700], 'Color', 'w');
 hold on;
-% Color by RGB
 scatter3(staticMap.positions(1, mapSampleIdx), ...
          staticMap.positions(2, mapSampleIdx), ...
          staticMap.positions(3, mapSampleIdx), ...
          15, staticMap.colours(:, mapSampleIdx)', '.');
-% Show some normals
 normalFinalSample = 1:20:length(mapSampleIdx);
 normalFinalIdx = mapSampleIdx(normalFinalSample);
 quiver3(staticMap.positions(1, normalFinalIdx), ...
@@ -294,7 +277,6 @@ c = colorbar;
 c.Label.String = 'RGB Color';
 fprintf('  Created Figure 9: Complete Surfel Map\n');
 
-%% Print summary information
 fprintf('\n=== Summary ===\n');
 fprintf('Input Data:\n');
 fprintf('  Point cloud size: %d points\n', size(XYZworld, 2));
@@ -322,20 +304,7 @@ fprintf('  ✓ Confidence and radius are initialized uniformly\n');
 fprintf('  ✓ Parameters are saved for future updates\n');
 
 fprintf('\n=== Visualization Complete ===\n');
-fprintf('Generated 9 separate figures:\n');
-fprintf('  Figure 1: Original RGB Image\n');
-fprintf('  Figure 2: Input Point Cloud\n');
-fprintf('  Figure 3: Input Normals\n');
-fprintf('  Figure 4: Surfel Positions\n');
-fprintf('  Figure 5: Surfel Normals\n');
-fprintf('  Figure 6: Surfel Colors\n');
-fprintf('  Figure 7: Surfel Confidence\n');
-fprintf('  Figure 8: Surfel Radius\n');
-fprintf('  Figure 9: Complete Surfel Map\n');
-fprintf('\nEach figure shows a different aspect of the initialization process.\n');
-fprintf('You can examine each figure individually for detailed analysis.\n');
 
-%% Helper functions
 function args = structToNameValue(s)
     if isempty(s)
         args = {};

@@ -1,8 +1,10 @@
+% Author: Anqi Wei
+% Adapted from StaticFusion
+% Reference: StaticFusion: Background Reconstruction for Dense RGB-D SLAM in Dynamic Environments
+%            GitHub: https://github.com/raluca-scona/staticfusion
+
 %% STATICFUSION_DEMO
-% Demonstrates an incremental static-fusion pipeline inspired by StaticFusion.
-% The script loads a SUN3D sequence, builds a surfel-based static background
-% map, segments static/dynamic observations each frame, tracks the camera pose
-% against the map, and visualises the reconstruction progress.
+% Incremental static-fusion pipeline inspired by StaticFusion
 
 clear; close all; clc;
 
@@ -14,7 +16,6 @@ else
     error('startup.m is missing.');
 end
 
-% Verify visualization functions are available
 if exist('visualizeProgress', 'file') ~= 2
     error('visualizeProgress function not found. Please check startup.m includes visualization path.');
 end
@@ -22,7 +23,6 @@ if exist('visualizeStaticFusionResults', 'file') ~= 2
     error('visualizeStaticFusionResults function not found. Please check startup.m includes visualization path.');
 end
 
-% Check for required functions
 if ~exist('knnsearch', 'builtin') && ~exist('knnsearch', 'file')
     error('knnsearch function not found. Please ensure Statistics and Machine Learning Toolbox is installed.');
 end
@@ -37,15 +37,24 @@ fprintf('Dependencies OK.\n\n');
 
 %% User configuration
 sequenceName = 'hotel_umd/maryland_hotel3';
-frameRange = 1:10;  % frames to process incrementally (reduced for debugging)
+frameRange = [];
+
+progress.enableSave = true;
+progress.savePath = fullfile(scriptDir, 'staticfusion_progress.mat');
+progress.saveEvery = 5;
+progress.restoreIfExists = true;
+
+memory.enableMonitoring = true;
+memory.warnThreshold = 0.8;
+memory.checkEvery = 10;
 
 depthFilterOpts = struct('minDepth', 0.4, 'maxDepth', 4.5, 'medianKernel', 3);
 denoiseOpts = struct('radius', 0.04, 'minNeighbors', 12);
 normalOpts = struct('K', 25);
 
-processing.downsample = 5;      % only keep every Nth point for processing (increased for stability)
-processing.visualiseEvery = 3;  % update visualisation every N frames
-processing.enableVisualisation = true;  % set to true to show figures
+processing.downsample = 5;
+processing.visualiseEvery = 3;
+processing.enableVisualisation = true;
 
 mapInitOpts = struct( ...
     'DefaultConfidence', 3.0, ...
@@ -71,8 +80,40 @@ trackingOpts = struct( ...
     'MinInliers', 120, ...
     'Verbose', false);
 
-%% Load data
+cleanupOpts = struct( ...
+    'EnableCleanup', true, ...
+    'CleanupEvery', 50, ...
+    'MinConfidence', 0.5, ...
+    'MergeRadius', 0.05, ...
+    'NormalSimilarity', 0.9, ...
+    'Verbose', true);
+
+meshOpts = struct( ...
+    'EnableReconstruction', true, ...
+    'Method', 'delaunay', ...
+    'MaxDistance', 0.1, ...
+    'NormalWeight', 0.8, ...
+    'ExportFormat', 'ply', ...
+    'ExportPath', fullfile(scriptDir, 'reconstruction_output.ply'), ...
+    'IncludeNormals', true, ...
+    'IncludeColors', true);
+
+%% Load data and determine frame range
 fprintf('[StaticFusion] Loading SUN3D sequence "%s"...\n', sequenceName);
+
+tempData = loadSUN3D(sequenceName, 1);
+if isempty(frameRange)
+    allData = loadSUN3D(sequenceName);
+    totalFrames = length(allData.image);
+    frameRange = 1:totalFrames;
+    fprintf('[StaticFusion] Processing all %d frames.\n', totalFrames);
+    clear allData;
+else
+    totalFrames = max(frameRange);
+    fprintf('[StaticFusion] Processing frames %d to %d (total: %d frames).\n', ...
+        min(frameRange), max(frameRange), numel(frameRange));
+end
+
 data = loadSUN3D(sequenceName, frameRange);
 numFrames = numel(frameRange);
 
@@ -80,46 +121,81 @@ if isempty(data.extrinsicsC2W)
     error('Extrinsic camera poses are unavailable for this sequence.');
 end
 
-%% Containers for outputs
-trajectory = zeros(3, numFrames);
-poses = zeros(4, 4, numFrames);
-staticCounts = zeros(1, numFrames);
-dynamicCounts = zeros(1, numFrames);
-lastStaticWorld = zeros(3, 0);
-lastDynamicWorld = zeros(3, 0);
-lastFrameID = frameRange(1);
+%% Progress restoration
+startFrameIdx = 1;
+if progress.restoreIfExists && exist(progress.savePath, 'file')
+    try
+        fprintf('[StaticFusion] Attempting to restore progress from %s...\n', progress.savePath);
+        saved = load(progress.savePath);
+        if isfield(saved, 'staticMap') && isfield(saved, 'currentPose') && ...
+           isfield(saved, 'idxFrame') && saved.idxFrame < numFrames
+            staticMap = saved.staticMap;
+            currentPose = saved.currentPose;
+            startFrameIdx = saved.idxFrame + 1;
+            trajectory = saved.trajectory;
+            poses = saved.poses;
+            staticCounts = saved.staticCounts;
+            dynamicCounts = saved.dynamicCounts;
+            lastStaticWorld = saved.lastStaticWorld;
+            lastDynamicWorld = saved.lastDynamicWorld;
+            lastFrameID = saved.lastFrameID;
+            fprintf('[StaticFusion] Restored progress from frame %d. Continuing from frame %d.\n', ...
+                saved.idxFrame, startFrameIdx);
+        else
+            fprintf('[StaticFusion] Saved progress incomplete or already finished. Starting fresh.\n');
+            startFrameIdx = 1;
+        end
+    catch ME
+        warning('[StaticFusion] Failed to restore progress: %s. Starting fresh.', ME.message);
+        startFrameIdx = 1;
+    end
+end
+
+if startFrameIdx == 1
+    trajectory = zeros(3, numFrames);
+    poses = zeros(4, 4, numFrames);
+    staticCounts = zeros(1, numFrames);
+    dynamicCounts = zeros(1, numFrames);
+    lastStaticWorld = zeros(3, 0);
+    lastDynamicWorld = zeros(3, 0);
+    lastFrameID = frameRange(1);
+end
 
 %% Initialise with first frame
-fprintf('[StaticFusion] Initialising map with frame %d...\n', frameRange(1));
-frameData = loadFrameData(data, frameRange, 1, depthFilterOpts, denoiseOpts, normalOpts);
+if startFrameIdx == 1
+    fprintf('[StaticFusion] Initialising map with frame %d...\n', frameRange(1));
+    frameData = loadFrameData(data, frameRange, 1, depthFilterOpts, denoiseOpts, normalOpts);
 
-firstPose = ensureHomogeneousTransform(data.extrinsicsC2W(:, :, frameData.frameID));
-poses(:, :, 1) = firstPose;
-trajectory(:, 1) = firstPose(1:3, 4);
+    firstPose = ensureHomogeneousTransform(data.extrinsicsC2W(:, :, frameData.frameID));
+    poses(:, :, 1) = firstPose;
+    trajectory(:, 1) = firstPose(1:3, 4);
 
-sampleIdx = selectSampleIndices(size(frameData.XYZcam, 2), processing.downsample);
+    sampleIdx = selectSampleIndices(size(frameData.XYZcam, 2), processing.downsample);
 
-XYZcamSample = frameData.XYZcam(:, sampleIdx);
-RGBsample = frameData.RGB(:, sampleIdx);
-normalsCamSample = frameData.normalsCam(:, sampleIdx);
+    XYZcamSample = frameData.XYZcam(:, sampleIdx);
+    RGBsample = frameData.RGB(:, sampleIdx);
+    normalsCamSample = frameData.normalsCam(:, sampleIdx);
 
-Rw = firstPose(1:3, 1:3);
-normalsWorld = normalizeColumns(Rw * normalsCamSample);
-XYZworld = Rw * XYZcamSample + firstPose(1:3, 4);
+    Rw = firstPose(1:3, 1:3);
+    normalsWorld = normalizeColumns(Rw * normalsCamSample);
+    XYZworld = Rw * XYZcamSample + firstPose(1:3, 4);
 
-pcInit = struct('XYZ', XYZworld, 'RGB', RGBsample);
-mapInitArgs = structToNameValue(mapInitOpts);
-staticMap = initializeStaticMap(pcInit, normalsWorld, mapInitArgs{:});
-lastStaticWorld = XYZworld;
-lastDynamicWorld = zeros(3, 0);
-lastFrameID = frameRange(1);
+    pcInit = struct('XYZ', XYZworld, 'RGB', RGBsample);
+    mapInitArgs = structToNameValue(mapInitOpts);
+    staticMap = initializeStaticMap(pcInit, normalsWorld, mapInitArgs{:});
+    lastStaticWorld = XYZworld;
+    lastDynamicWorld = zeros(3, 0);
+    lastFrameID = frameRange(1);
 
-staticCounts(1) = size(XYZcamSample, 2);
-dynamicCounts(1) = 0;
+    staticCounts(1) = size(XYZcamSample, 2);
+    dynamicCounts(1) = 0;
+    currentPose = firstPose;
+else
+    fprintf('[StaticFusion] Using restored state. Starting from frame %d.\n', startFrameIdx);
+end
 
 %% Main processing loop
-currentPose = firstPose;
-for idxFrame = 2:numFrames
+for idxFrame = startFrameIdx:numFrames
     try
         frameID = frameRange(idxFrame);
         fprintf('[StaticFusion] Processing frame %d (%d/%d)...\n', frameID, idxFrame, numFrames);
@@ -143,7 +219,6 @@ for idxFrame = 2:numFrames
         colours = frameData.RGB(:, sampleIdx);
         normalsCam = frameData.normalsCam(:, sampleIdx);
         
-        % Validate sizes
         if size(pointsCam, 2) ~= size(colours, 2) || size(pointsCam, 2) ~= size(normalsCam, 2)
             error('Size mismatch: points=%d, colours=%d, normals=%d', ...
                 size(pointsCam, 2), size(colours, 2), size(normalsCam, 2));
@@ -199,7 +274,6 @@ for idxFrame = 2:numFrames
         poses(:, :, idxFrame) = currentPose;
         trajectory(:, idxFrame) = currentPose(1:3, 4);
 
-        % Visualization during processing
         if processing.enableVisualisation && mod(idxFrame - 1, processing.visualiseEvery) == 0
             try
                 visualizeProgress(staticMap, currentPose, pointsCam, segRes.staticMask, segRes.dynamicMask, trajectory(:, 1:idxFrame));
@@ -208,6 +282,60 @@ for idxFrame = 2:numFrames
             end
         end
         fprintf('  Frame %d complete.\n\n', frameID);
+        
+        if cleanupOpts.EnableCleanup && mod(idxFrame, cleanupOpts.CleanupEvery) == 0
+            try
+                fprintf('[StaticFusion] Running periodic map cleanup...\n');
+                cleanupArgs = {};
+                if isfield(cleanupOpts, 'MinConfidence')
+                    cleanupArgs{end+1} = 'MinConfidence';
+                    cleanupArgs{end+1} = cleanupOpts.MinConfidence;
+                end
+                if isfield(cleanupOpts, 'MergeRadius')
+                    cleanupArgs{end+1} = 'MergeRadius';
+                    cleanupArgs{end+1} = cleanupOpts.MergeRadius;
+                end
+                if isfield(cleanupOpts, 'NormalSimilarity')
+                    cleanupArgs{end+1} = 'NormalSimilarity';
+                    cleanupArgs{end+1} = cleanupOpts.NormalSimilarity;
+                end
+                if isfield(cleanupOpts, 'Verbose')
+                    cleanupArgs{end+1} = 'Verbose';
+                    cleanupArgs{end+1} = cleanupOpts.Verbose;
+                end
+                staticMap = cleanupStaticMap(staticMap, cleanupArgs{:});
+                fprintf('[StaticFusion] Map cleanup complete. Current surfels: %d\n', ...
+                    size(staticMap.positions, 2));
+            catch ME
+                warning('[StaticFusion] Map cleanup failed: %s', ME.message);
+            end
+        end
+        
+        if memory.enableMonitoring && mod(idxFrame, memory.checkEvery) == 0
+            if ispc
+                [~, memInfo] = memory;
+                memUsage = memInfo.MemUsedMATLAB / memInfo.MemAvailableAllArrays;
+            else
+                [~, memStr] = unix('vm_stat | grep "Pages free"');
+                memUsage = 0.5;
+            end
+            if memUsage > memory.warnThreshold
+                warning('[StaticFusion] High memory usage detected (%.1f%%). Consider reducing downsample or enabling map cleanup.', ...
+                    memUsage * 100);
+            end
+        end
+        
+        if progress.enableSave && mod(idxFrame, progress.saveEvery) == 0
+            try
+                fprintf('[StaticFusion] Saving progress at frame %d...\n', frameID);
+                save(progress.savePath, 'staticMap', 'currentPose', 'trajectory', 'poses', ...
+                    'staticCounts', 'dynamicCounts', 'lastStaticWorld', 'lastDynamicWorld', ...
+                    'lastFrameID', 'idxFrame', 'frameRange', '-v7.3');
+                fprintf('[StaticFusion] Progress saved.\n');
+            catch ME
+                warning('[StaticFusion] Failed to save progress: %s', ME.message);
+            end
+        end
     catch ME
         fprintf('\n!!! ERROR at frame %d (index %d) !!!\n', frameRange(idxFrame), idxFrame);
         fprintf('Error message: %s\n', ME.message);
@@ -222,6 +350,18 @@ end
 
 fprintf('[StaticFusion] Processing complete. Final map contains %d surfels.\n', size(staticMap.positions, 2));
 
+if progress.enableSave
+    try
+        fprintf('[StaticFusion] Saving final progress...\n');
+        save(progress.savePath, 'staticMap', 'currentPose', 'trajectory', 'poses', ...
+            'staticCounts', 'dynamicCounts', 'lastStaticWorld', 'lastDynamicWorld', ...
+            'lastFrameID', 'idxFrame', 'frameRange', '-v7.3');
+        fprintf('[StaticFusion] Final progress saved.\n');
+    catch ME
+        warning('[StaticFusion] Failed to save final progress: %s', ME.message);
+    end
+end
+
 %% Final visualization
 if processing.enableVisualisation
     fprintf('[StaticFusion] Generating final visualizations...\n');
@@ -230,7 +370,6 @@ if processing.enableVisualisation
     fprintf('  Trajectory points: %d\n', size(trajectory, 2));
     fprintf('  Frame range: %d to %d\n', frameRange(1), frameRange(end));
 
-    % Only visualize if we have valid data
     if ~isempty(staticMap.positions) && size(staticMap.positions, 2) > 0 && ...
        ~isempty(trajectory) && size(trajectory, 2) >= 2
         try
@@ -252,9 +391,47 @@ else
     fprintf('[StaticFusion] Visualisation disabled (processing.enableVisualisation = false).\n');
 end
 
+%% Mesh reconstruction and export
+if meshOpts.EnableReconstruction
+    fprintf('[StaticFusion] Starting mesh reconstruction...\n');
+    try
+        meshArgs = {};
+        meshArgs{end+1} = 'Method';
+        meshArgs{end+1} = meshOpts.Method;
+        meshArgs{end+1} = 'MaxDistance';
+        meshArgs{end+1} = meshOpts.MaxDistance;
+        meshArgs{end+1} = 'NormalWeight';
+        meshArgs{end+1} = meshOpts.NormalWeight;
+        meshArgs{end+1} = 'Verbose';
+        meshArgs{end+1} = true;
+        
+        mesh = surfelToMesh(staticMap, meshArgs{:});
+        
+        fprintf('[StaticFusion] Mesh reconstruction complete.\n');
+        fprintf('[StaticFusion] Exporting mesh to %s...\n', meshOpts.ExportPath);
+        
+        exportArgs = {};
+        exportArgs{end+1} = 'Format';
+        exportArgs{end+1} = meshOpts.ExportFormat;
+        exportArgs{end+1} = 'IncludeNormals';
+        exportArgs{end+1} = meshOpts.IncludeNormals;
+        exportArgs{end+1} = 'IncludeColors';
+        exportArgs{end+1} = meshOpts.IncludeColors;
+        
+        exportMesh(mesh, meshOpts.ExportPath, exportArgs{:});
+        fprintf('[StaticFusion] Mesh export complete.\n');
+    catch ME
+        fprintf('[StaticFusion] ERROR: Mesh reconstruction/export failed: %s\n', ME.message);
+        if ~isempty(ME.stack)
+            fprintf('  Error location: %s (line %d)\n', ME.stack(1).file, ME.stack(1).line);
+        end
+    end
+else
+    fprintf('[StaticFusion] Mesh reconstruction disabled.\n');
+end
+
 %% Helper functions
 function frameData = loadFrameData(data, frameRange, localIdx, depthFilterOpts, denoiseOpts, normalOpts)
-try
     frameID = frameRange(localIdx);
     image = imread(data.image{localIdx});
     depth = double(depthRead(data.depth{localIdx}));
@@ -306,7 +483,6 @@ else
 end
 end
 
-% Visualization functions moved to visualization/visualizeProgress.m
 function args = structToNameValue(s)
 if isempty(s)
     args = {};
@@ -352,6 +528,3 @@ end
 
 error('Unsupported transform size %dx%d.', sz(1), sz(2));
 end
-
-% Visualization functions moved to visualization/visualizeStaticFusionResults.m
-

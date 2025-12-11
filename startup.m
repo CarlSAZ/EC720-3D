@@ -21,4 +21,5 @@ addpath(fullfile(rootDir, 'fusion'));
 addpath(fullfile(rootDir, 'segmentation'));
 addpath(fullfile(rootDir, 'tracking'));
 addpath(fullfile(rootDir, 'visualization'));
+addpath(fullfile(rootDir, 'reconstruction'));
 addpath(fullfile(rootDir, 'BronnMatlab'));

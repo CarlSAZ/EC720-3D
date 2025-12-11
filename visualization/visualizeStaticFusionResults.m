@@ -1,11 +1,8 @@
 function visualizeStaticFusionResults(staticMap, poses, trajectory, staticCounts, dynamicCounts, frameRange, varargin)
-%VISUALIZESTATICFUSIONRESULTS Comprehensive visualization of StaticFusion results.
-%   visualizeStaticFusionResults(staticMap, poses, trajectory, staticCounts, dynamicCounts, frameRange)
-%   creates multiple visualization windows showing the reconstruction results.
+% Comprehensive visualization of StaticFusion results
 
 narginchk(6, inf);
 
-% Parse options
 p = inputParser;
 addParameter(p, 'ShowProgress', true, @islogical);
 addParameter(p, 'ShowFinal', true, @islogical);
@@ -18,7 +15,6 @@ addParameter(p, 'LastFrameID', [], @(x) isempty(x) || isnumeric(x));
 parse(p, varargin{:});
 opts = p.Results;
 
-% Validate inputs
 if isempty(staticMap) || ~isfield(staticMap, 'positions') || isempty(staticMap.positions)
     warning('visualizeStaticFusionResults:EmptyMap', 'Static map is empty, skipping visualization.');
     return;
@@ -29,11 +25,9 @@ if isempty(trajectory) || size(trajectory, 2) < 2
     return;
 end
 
-% Statistics plot
 if opts.ShowStatistics
     try
         figStats = figure('Name', 'Static vs Dynamic Counts', 'Visible', 'on');
-        % Ensure correct color mapping: Green for Static, Red for Dynamic
         h1 = plot(frameRange, staticCounts, '-g', 'LineWidth', 1.5, 'DisplayName', 'Static (processed)'); hold on;
         h2 = plot(frameRange, dynamicCounts, '-r', 'LineWidth', 1.5, 'DisplayName', 'Dynamic (processed)');
         xlabel('Frame'); ylabel('Point count (sampled)');
@@ -46,10 +40,7 @@ if opts.ShowStatistics
     end
 end
 
-% Final results visualization
-% Only create if we have valid data (already validated above)
 if opts.ShowFinal
-    % Double-check data validity before creating figure
     if ~isempty(staticMap.positions) && size(staticMap.positions, 2) > 0 && ...
        ~isempty(trajectory) && size(trajectory, 2) >= 2
         try
@@ -70,8 +61,6 @@ end
 end
 
 function visualizeFinalResults(staticMap, trajectory, staticCounts, dynamicCounts, frameRange, opts)
-% Internal function for final results visualization
-
 fprintf('\n[Visualization] ===== Starting Final Results Visualization =====\n');
 fprintf('[Visualization] Map: %dx%d points\n', size(staticMap.positions, 1), size(staticMap.positions, 2));
 fprintf('[Visualization] Trajectory: %dx%d points\n', size(trajectory, 1), size(trajectory, 2));
@@ -88,7 +77,6 @@ if isempty(trajectory) || size(trajectory, 2) < 2
     return;
 end
 
-% Check if we have any data to plot
 hasMapData = ~isempty(staticMap.positions) && size(staticMap.positions, 2) > 0;
 hasTrajectoryData = size(trajectory, 2) >= 2;
 hasCountData = ~isempty(frameRange) && ~isempty(staticCounts) && ~isempty(dynamicCounts) && ...
@@ -104,20 +92,17 @@ if ~hasMapData && ~hasTrajectoryData && ~hasCountData && ~hasStaticWorld && ~has
     return;
 end
 
-% Create figure
 fig = figure('Name', 'StaticFusion Final Results', 'Position', [100, 100, 1400, 800], 'Visible', 'on');
 clf(fig);
 set(fig, 'Visible', 'on');
 drawnow;
 fprintf('[Visualization] Figure created.\n');
 
-% Subplot 1: Static map with trajectory (3D) - spans left column
 fprintf('[Visualization] Creating subplot 1 (3D map + trajectory)...\n');
 try
     ax1 = subplot(2, 3, [1, 4]);
     hold(ax1, 'on');
     
-    % Plot static map
     if ~isempty(staticMap.positions) && size(staticMap.positions, 2) > 0
         mapIdx = 1:opts.DownsampleMap:size(staticMap.positions, 2);
         mapIdx = mapIdx(mapIdx <= size(staticMap.positions, 2));
@@ -145,7 +130,6 @@ try
         text(ax1, 0.5, 0.5, 'No map data', 'HorizontalAlignment', 'center');
     end
     
-    % Plot trajectory
     if size(trajectory, 2) >= 2
         fprintf('[Visualization]   Plotting trajectory (%d points)...\n', size(trajectory, 2));
         plot3(ax1, trajectory(1, :), trajectory(2, :), trajectory(3, :), ...
@@ -185,13 +169,11 @@ catch ME
     end
 end
 
-% Subplot 2: Static vs Dynamic counts over time
 fprintf('[Visualization] Creating subplot 2 (counts over time)...\n');
 try
     ax2 = subplot(2, 3, 2);
     if ~isempty(frameRange) && ~isempty(staticCounts) && ~isempty(dynamicCounts) && ...
             numel(frameRange) == numel(staticCounts) && numel(frameRange) == numel(dynamicCounts)
-        % Ensure correct color mapping: Green for Static, Red for Dynamic
         h1 = plot(ax2, frameRange, staticCounts, '-g', 'LineWidth', 2, 'DisplayName', 'Static'); hold(ax2, 'on');
         h2 = plot(ax2, frameRange, dynamicCounts, '-r', 'LineWidth', 2, 'DisplayName', 'Dynamic');
         xlabel(ax2, 'Frame'); ylabel(ax2, 'Point count (sampled)');
@@ -211,7 +193,6 @@ catch ME
     fprintf('[Visualization] ERROR in subplot 2: %s\n', ME.message);
 end
 
-% Subplot 3: Map confidence distribution
 fprintf('[Visualization] Creating subplot 3 (confidence distribution)...\n');
 try
     ax3 = subplot(2, 3, 3);
@@ -228,7 +209,6 @@ catch ME
     fprintf('[Visualization] ERROR in subplot 3: %s\n', ME.message);
 end
 
-% Subplot 4: Trajectory top view with final segmentation
 fprintf('[Visualization] Creating subplot 4 (trajectory + segmentation top view)...\n');
 try
     ax4 = subplot(2, 3, 5);
@@ -257,7 +237,6 @@ catch ME
     fprintf('[Visualization] ERROR in subplot 4: %s\n', ME.message);
 end
 
-% Subplot 5: Statistics text
 fprintf('[Visualization] Creating subplot 5 (statistics)...\n');
 try
     ax5 = subplot(2, 3, 6);
@@ -327,7 +306,6 @@ catch ME
         'HorizontalAlignment', 'center', 'FontSize', 10);
 end
 
-% Add overall title
 try
     sgtitle(fig, 'StaticFusion Reconstruction Results', 'FontSize', 14, 'FontWeight', 'bold');
 catch
@@ -337,14 +315,12 @@ catch
         'HorizontalAlignment', 'center', 'EdgeColor', 'none');
 end
 
-% Force figure update
 set(fig, 'Visible', 'on');
 drawnow;
 pause(0.1);
 refresh(fig);
 drawnow;
 
-% Verify that at least one subplot has content
 try
     children = get(fig, 'Children');
     hasContent = false;
@@ -353,7 +329,6 @@ try
             if isa(children(i), 'matlab.graphics.axis.Axes')
                 ax = children(i);
                 axChildren = get(ax, 'Children');
-                % Check if there are any plot objects (not just text)
                 for j = 1:numel(axChildren)
                     obj = axChildren(j);
                     if ~isa(obj, 'matlab.graphics.primitive.Text') && ...
@@ -367,7 +342,6 @@ try
                 end
             end
         catch
-            % Skip invalid children
             continue;
         end
     end
