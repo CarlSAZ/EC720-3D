@@ -95,6 +95,7 @@ end
 %% Containers for outputs
 trajectory = zeros(3, numFrames);
 poses = zeros(4, 4, numFrames);
+truePoses = zeros(4, 4, numFrames);
 staticCounts = zeros(1, numFrames);
 dynamicCounts = zeros(1, numFrames);
 lastStaticWorld = zeros(3, 0);
@@ -112,34 +113,8 @@ frameData = loadFrameDataBonn(data, frameRange, 1, depthFilterOpts, denoiseOpts,
 
 [~,poseIdx] = min(abs(data.rgblist.time_posix(frameRange(1)) - data.poseTruth.timestamp));
 
-if USE_GT_INIT
-    try
-        % TUM RGB-D format: timestamp tx ty tz qx qy qz qw
-        % Reference: TUM RGB-D dataset format standard
-        poseRow = data.poseTruth(poseIdx, :);
-        txyz = poseRow.txyz;
-        quat = poseRow.quat;
-        quat_tum = [quat(2), quat(3), quat(4), quat(1)];
-        firstPose = tumPoseToTransform(txyz, quat_tum);
-        
-        if ENABLE_POSE_DIAGNOSTICS
-            fprintf('  Using TUM format pose directly.\n');
-            fprintf('  Twc translation: [%.4f, %.4f, %.4f]\n', ...
-                firstPose(1,4), firstPose(2,4), firstPose(3,4));
-            fprintf('  GT translation: [%.4f, %.4f, %.4f]\n', ...
-                txyz(1), txyz(2), txyz(3));
-            fprintf('  Rotation determinant: %.6f\n', det(firstPose(1:3, 1:3)));
-        end
-        fprintf('  Using ground truth pose for initialization (TUM format).\n');
-    catch ME
-        warning('Failed to load ground truth pose, using identity: %s', ME.message);
-        firstPose = eye(4);
-    end
-else
-    firstPose = eye(4);
-    fprintf('  Using identity pose for initialization.\n');
-end
-
+firstPose = ensureHomogeneousTransform(bronnTransform(data.poseTruth(poseIdx,:)));
+% firstPose = [eye(4,3) [ones(3,1);1]];
 poses(:, :, 1) = firstPose;
 trajectory(:, 1) = firstPose(1:3, 4);
 
@@ -339,89 +314,12 @@ for idxFrame = 2:numFrames
                 end
             end
 
-            if trackRes.success
-                currentPose = trackRes.Twc;
-                fprintf('  Pose tracking succeeded (RMSE: %.4f, inliers: %d)\n', ...
-                    trackRes.rmse, nnz(trackRes.inlierMask));
-                
-                if idxFrame > 2
-                    prevPose = poses(:, :, idxFrame - 1);
-                    relMotion = inv(prevPose) * currentPose;
-                    relTrans = relMotion(1:3, 4);
-                    relTransNorm = norm(relTrans);
-                    
-                    if relTransNorm > 0.5
-                        warning('Frame %d: Large relative translation (%.4f m)', frameID, relTransNorm);
-                    end
-                    
-                    rotDet = det(currentPose(1:3, 1:3));
-                    if abs(rotDet - 1.0) > 0.01
-                        warning('Frame %d: Tracked pose rotation matrix determinant is %.6f', frameID, rotDet);
-                    end
-                end
-                
-                if ENABLE_POSE_DIAGNOSTICS && ENABLE_EVALUATION
-                    [~,gtPoseIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
-                    poseRow_gt = data.poseTruth(gtPoseIdx, :);
-                    txyz_gt = poseRow_gt.txyz;
-                    quat_gt = poseRow_gt.quat;
-                    quat_tum_gt = [quat_gt(2), quat_gt(3), quat_gt(4), quat_gt(1)];
-                    gtPose = tumPoseToTransform(txyz_gt, quat_tum_gt);
-                    poseDiff = norm(currentPose(1:3, 4) - gtPose(1:3, 4));
-                    fprintf('  [Diagnostic] Pose diff from GT: translation=%.4f m\n', poseDiff);
-                    
-                    if trackRes.rmse > 0.1 || nnz(trackRes.inlierMask) < 100
-                        warning('Tracking quality may be poor: RMSE=%.4f, inliers=%d', ...
-                            trackRes.rmse, nnz(trackRes.inlierMask));
-                    end
-                    if poseDiff > 0.15
-                        warning('Tracking result deviates significantly from GT (%.4f m)', poseDiff);
-                    end
-                end
-            else
-                warning('Pose tracking failed for frame %d.', frameID);
-                
-                if idxFrame > 2
-                    prevPose = poses(:, :, idxFrame - 1);
-                    prevPrevPose = poses(:, :, idxFrame - 2);
-                    
-                    relMotion = inv(prevPrevPose) * prevPose;
-                    relTransNorm = norm(relMotion(1:3, 4));
-                    
-                    if relTransNorm > 0.01 && relTransNorm < 0.3
-                        predictedPose = prevPose * relMotion;
-                        rotDet = det(predictedPose(1:3, 1:3));
-                        if abs(rotDet - 1.0) < 0.01
-                            currentPose = predictedPose;
-                            fprintf('  Using motion prediction (tracking failed, motion: %.4f m).\n', relTransNorm);
-                        else
-                            currentPose = prevPose;
-                            fprintf('  Keeping previous pose (motion prediction invalid).\n');
-                        end
-                    else
-                        currentPose = prevPose;
-                        fprintf('  Keeping previous pose (previous motion unreasonable: %.4f m).\n', relTransNorm);
-                    end
-                else
-                    currentPose = poses(:, :, idxFrame - 1);
-                    fprintf('  Keeping previous pose (no motion model available).\n');
-                end
-                
-                if ENABLE_POSE_DIAGNOSTICS && ENABLE_EVALUATION
-                    [~,gtPoseIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
-                    poseRow_gt = data.poseTruth(gtPoseIdx, :);
-                    txyz_gt = poseRow_gt.txyz;
-                    quat_gt = poseRow_gt.quat;
-                    quat_tum_gt = [quat_gt(2), quat_gt(3), quat_gt(4), quat_gt(1)];
-                    gtPose = tumPoseToTransform(txyz_gt, quat_tum_gt);
-                    poseDiff = norm(currentPose(1:3, 4) - gtPose(1:3, 4));
-                    fprintf('  [Diagnostic] Pose diff from GT: translation=%.4f m\n', poseDiff);
-                    if poseDiff > 0.5
-                        warning('Pose error is large (%.2f m)', poseDiff);
-                    end
-                end
-            end
-        end
+        [~,dbposeIdx] = min(abs(data.rgblist.time_posix(frameID) - data.poseTruth.timestamp));
+        truePoses(:,:,idxFrame) = bronnTransform(data.poseTruth(dbposeIdx,:));
+
+        % DEBUG
+        % fprintf("CHEATING!!")
+        % currentPose = truePoses(:,:,idxFrame);
 
         fprintf('  Re-predicting static map...\n');
         prediction = predictStaticMap(staticMap, currentPose);
