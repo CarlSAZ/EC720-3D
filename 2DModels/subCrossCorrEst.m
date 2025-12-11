@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [delta,blockDiffs,dBlockAll] = subCrossCorrEst(origIm,nextIm,blockSize)
 % 
 [f1,f2] = freqspace(64,'meshgrid');

@@ -1,3 +1,5 @@
+% Source: SUN3D Database
+% https://sun3d.cs.princeton.edu/toolbox/
 function data = loadSUN3D(sequenceName, frameIDs)
 
     if ~exist('sequenceName','var')

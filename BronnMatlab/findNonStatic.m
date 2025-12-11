@@ -1,3 +1,4 @@
+% Author: Carl Stevenson
 function [labels,dist] = findNonStatic(CameraXYZ,pose,truthTable,thresh)
 
 Tg = bronnTransform(pose);

@@ -1,3 +1,5 @@
+% Source: Bonn RGB-D Dynamic Dataset
+% Adapted to MATLAB by Carl Stevenson
 function Tg = bronnTransform(initial_pose)
 %BRONNTRANSFORM Summary of this function goes here
 %   Detailed explanation goes here

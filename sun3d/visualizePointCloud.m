@@ -1,4 +1,5 @@
-
+% Source: SUN3D Database
+% https://sun3d.cs.princeton.edu/toolbox/
 function visualizePointCloud(XYZ,RGB, subsampleGap)
     if ~exist('subsampleGap','var')
         subsampleGap = 50;

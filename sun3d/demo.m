@@ -1,4 +1,7 @@
 % Demonstrate loading and using SUN3D data
+% Source: SUN3D Database
+% https://sun3d.cs.princeton.edu/toolbox/
+%% this code demonstrates how to load SUN3D and how to use SUN3D in different ways
 
 data = loadSUN3D('hotel_umd/maryland_hotel3');
 

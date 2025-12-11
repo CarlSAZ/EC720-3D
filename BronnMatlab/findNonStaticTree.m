@@ -1,3 +1,4 @@
+% Author: Carl Stevenson
 function [labels,dist] = findNonStaticTree(CameraXYZ,pose,truthTree,thresh)
 
 Tg = bronnTransform(pose);

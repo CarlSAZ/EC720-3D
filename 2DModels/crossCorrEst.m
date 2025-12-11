@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [offset,Ruu,x,y] = crossCorrEst(frame1,frame2)
 
     win1 = window(@hann,size(frame1,1));

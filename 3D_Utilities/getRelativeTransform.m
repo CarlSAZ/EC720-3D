@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [RelRot,RelTrans] = getRelativeTransform(Rt_1,Rt_2)
 
 R2inv = inv(Rt_2(1:3,1:3));

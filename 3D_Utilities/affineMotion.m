@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [delta,xp,yp] = affineMotion(R,T,f,x,y,Z)
 
 Z(Z==0) = inf;

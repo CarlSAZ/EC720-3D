@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function shiftedIm = shiftImageHorne(frame,u,v)
     shiftedIm = zeros(size(frame));
 

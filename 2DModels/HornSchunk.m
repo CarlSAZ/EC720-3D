@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [u,v,cost,mse,mae,Uhist,Vhist] = HornSchunk(image1,image2,lambda)
 
     u = zeros(size(image2)+2);

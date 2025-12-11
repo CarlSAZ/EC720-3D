@@ -1,4 +1,4 @@
-
+% Author: Carl Stevenson
 
 % groundTruthFile = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_groundtruth_1mm_section.ply";
 % dataset = "C:\Users\carl\Documents\EC720\rgbd_bonn_dataset\rgbd_bonn_crowd";

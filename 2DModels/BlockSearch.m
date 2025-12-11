@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function [delta,D] = BlockSearch(frame1,frame2,blockSize,maxDist,errFunc)
     [X,Y] = meshgrid(-maxDist:maxDist,-maxDist:maxDist);
     X = X(:);

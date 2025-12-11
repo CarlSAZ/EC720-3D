@@ -1,3 +1,4 @@
+% Author: Carl Stevenson (HW problem solution)
 function shiftedIm = shiftImage(frame,Displacement,maxDist)
     shiftedIm = zeros(size(frame));
 

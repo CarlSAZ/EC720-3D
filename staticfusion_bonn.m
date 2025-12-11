@@ -1,10 +1,13 @@
-% Author: Anqi Wei
+% Author: Anqi Wei, Carl Stevenson
 % Adapted from StaticFusion
 % Reference: StaticFusion: Background Reconstruction for Dense RGB-D SLAM in Dynamic Environments
 %            GitHub: https://github.com/raluca-scona/staticfusion
 
 %% STATICFUSION - Bonn Dataset
-% Incremental static-fusion pipeline inspired by StaticFusion
+% Demonstrates an incremental static-fusion pipeline inspired by StaticFusion.
+% The script loads a Bonn sequence, builds a surfel-based static background
+% map, segments static/dynamic observations each frame, tracks the camera pose
+% against the map, and visualises the reconstruction progress.
 
 clear; close all; clc;
 

@@ -1,3 +1,5 @@
+# Source: Bonn RGB-D Dynamic Dataset
+# https://www.ipb.uni-bonn.de/data/rgbd-dynamic-dataset/index.html
 import numpy as np
 import quaternion
 

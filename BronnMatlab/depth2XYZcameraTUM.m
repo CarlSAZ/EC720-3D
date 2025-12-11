@@ -1,3 +1,5 @@
+% Source: TUM RGB-D Benchmark
+% Adapted to MATLAB from python by Carl Stevenson
 function XYZcamera = depth2XYZcameraTUM(fx,fy,cx,cy, depth)
     [x,y] = meshgrid(1:640, 1:480);
     XYZcamera(:,:,1) = (x-cx).*depth/fx;
